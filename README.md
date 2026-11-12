@@ -121,8 +121,8 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 ### Blueprints in this repository
 
 - [1 · Learn to walk](blueprints/1-learn-to-walk.json) · 9 blocks · version 3
-- [2 · Learn the circuit](blueprints/2-learn-the-circuit.json) · 11 blocks · version 3
-- [3 · Circuit test](blueprints/3-circuit-test.json) · 9 blocks · version 4
+- [2 · Learn the circuit](blueprints/2-learn-the-circuit.json) · 11 blocks · version 4
+- [3 · Circuit test](blueprints/3-circuit-test.json) · 9 blocks · version 5
 
 ### Workspace blocks it uses
 

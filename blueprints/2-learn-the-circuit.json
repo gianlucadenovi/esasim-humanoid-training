@@ -5,8 +5,8 @@
     },
     "name": "2 · Learn the circuit",
     "description": "Carries on from the best flat-floor policy on the test course (bumps, a slope up and down, blocks), thousands of robots at once on the GPU; the policy goes back to the humanoid-policy dataset for flow 2 to walk with.",
-    "published_version": 3,
-    "updated": "2026-11-12 15:23:13",
+    "published_version": 4,
+    "updated": "2026-11-12 17:26:17",
     "graph": {
         "nodes": [
             {
@@ -31,7 +31,7 @@
                     "accelerator": "NVIDIA GPU",
                     "terrain": "Circuit",
                     "robots": 4096,
-                    "minutes": 120,
+                    "minutes": 240,
                     "max_speed": 1,
                     "push": 1.5,
                     "replay_every": 20,
@@ -280,7 +280,50 @@
         ],
         "notes": [],
         "dash": {
-            "items": []
+            "items": {
+                "view": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 6,
+                    "h": 12
+                },
+                "cam_side": {
+                    "x": 0,
+                    "y": 12,
+                    "w": 6,
+                    "h": 12
+                },
+                "telemetry": {
+                    "x": 0,
+                    "y": 24,
+                    "w": 12,
+                    "h": 17
+                },
+                "score": {
+                    "x": 6,
+                    "y": 10,
+                    "w": 6,
+                    "h": 7
+                },
+                "episode": {
+                    "x": 6,
+                    "y": 0,
+                    "w": 6,
+                    "h": 7
+                },
+                "speed": {
+                    "x": 6,
+                    "y": 17,
+                    "w": 6,
+                    "h": 7
+                },
+                "numbers": {
+                    "x": 6,
+                    "y": 7,
+                    "w": 6,
+                    "h": 3
+                }
+            }
         }
     }
 }

@@ -5,7 +5,7 @@
     },
     "name": "3 · Circuit test",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
-    "published_version": 4,
+    "published_version": 5,
     "updated": "2026-11-12 15:23:22",
     "graph": {
         "nodes": [

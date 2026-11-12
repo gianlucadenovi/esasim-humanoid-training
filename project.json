@@ -18,13 +18,13 @@
         {
             "name": "2 · Learn the circuit",
             "file": "blueprints/2-learn-the-circuit.json",
-            "published_version": 3,
+            "published_version": 4,
             "nodes": 11
         },
         {
             "name": "3 · Circuit test",
             "file": "blueprints/3-circuit-test.json",
-            "published_version": 4,
+            "published_version": 5,
             "nodes": 9
         }
     ],
