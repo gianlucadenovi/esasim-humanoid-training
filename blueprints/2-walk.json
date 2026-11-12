@@ -6,7 +6,7 @@
     "name": "2 · Walk",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
     "published_version": 2,
-    "updated": "2026-11-12 05:59:17",
+    "updated": "2026-11-12 13:23:40",
     "graph": {
         "nodes": [
             {
@@ -148,20 +148,20 @@
                 "main": {
                     "x": 0,
                     "y": 0,
-                    "w": 12,
-                    "h": 12
+                    "w": 6,
+                    "h": 21
                 },
                 "cam_follow": {
-                    "x": 0,
-                    "y": 12,
-                    "w": 12,
-                    "h": 12
+                    "x": 6,
+                    "y": 0,
+                    "w": 6,
+                    "h": 10
                 },
                 "cam_front": {
-                    "x": 0,
-                    "y": 24,
-                    "w": 12,
-                    "h": 12
+                    "x": 6,
+                    "y": 10,
+                    "w": 6,
+                    "h": 11
                 }
             }
         }
