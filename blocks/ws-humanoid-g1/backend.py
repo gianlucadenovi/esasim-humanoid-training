@@ -1,17 +1,17 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid G1 (ws-humanoid-g1) · version 4 · machine block, Python: def run(ctx)
-# A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit with rough ground, slopes, moving tiles and stairs, seeing the ground ahead
+# Humanoid G1 (ws-humanoid-g1) · version 5 · machine block, Python: def run(ctx)
+# A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up on its own after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-12
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt)                Policy · several · optional · Walking policies (.pt) from Learn to walk: Walk drives the robot with the newest; Learn to walk carries on from the best
+#   policy      Files (pt)                Policy · several · optional · Policies (.pt): walking ones (Learn to walk) and stand-up ones (Learn to stand up). Walk drives the robot with the newest walking one and gets it up with the newest stand-up one; each training carries
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
-#   policy      Files (pt)                Policy · Learn to walk: humanoid_walk_[circuit_]<date>_<NN>.pt, the best policy learned (network, input scaling, ground, walk score)
-#   curve       Table (csv)               Learning curve · Learn to walk: training.csv
+#   policy      Files (pt)                Policy · humanoid_walk_[circuit_]<date>_<NN>.pt (Learn to walk) or humanoid_standup_<date>_<NN>.pt (Learn to stand up): the best policy learned (network, input scaling, optimizer, ground, score)
+#   curve       Table (csv)               Learning curve · training.csv (Learn to walk) or standup.csv (Learn to stand up)
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
-#   mode        select    What to do = "Learn to walk" of Learn to walk | Walk
+#   mode        select    What to do = "Learn to walk" of Learn to walk | Learn to stand up | Walk
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
 #   terrain     select    Ground = "Flat floor" of Flat floor | Circuit
 #   robots      number    Robots learning at once = 4096
@@ -20,10 +20,11 @@
 #   push        number    Pushes up to (m/s) = 1.5
 #   replay_every number    Replay every (s) = 20
 #   seed        number    Seed = 1
-#   from_scratch bool      Start from scratch = false
+#   training    select    Training = "Continue" of Continue | Start over
 #   speed       number    Walking speed (m/s) = 0.6
 #   heading     number    Heading (degrees) = 0
 #   policy_file text      Policy file = ""
+#   after_fall  select    After a fall = "Get up on its own" of Get up on its own | Put back on its feet
 # Runs on  Any machine, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang (installed by the worker with pip when missing)
 # EsaSim rewrites these lines from the block's definition each time it is saved: change the definition, not them.
@@ -41,7 +42,10 @@ What to do: Learn to walk: the policy (a neural network that, 50 times a second,
 elevation map of the ground ahead from its head camera, into targets for its 29 joints) learns by trial and error (PPO)
 to walk at the speed asked, along its line. Walk: the newest policy drives the robot live in the 3D view
 (esasim.humanoid/1) round the circuit, lap after lap: set the speed and the way round, push it, reset it; its frames
-carry its IMU, foot loads, motor torques and the tiles' clock for the head camera and telemetry views."""
+carry its IMU, foot loads, motor torques and the tiles' clock for the head camera and telemetry views. Learn to stand
+up: lying where a fall left it, it learns to get up on its own (with an upward help on its torso at first, taken away as
+it succeeds); Walk then uses that policy after each fall. Training: Continue carries on from the newest policy (also one
+a stopped run left on the machine), Start over learns from nothing."""
 import math
 
 
@@ -228,6 +232,7 @@ class WarpSim:
         self.sens = wp.to_torch(self.d.sensordata)
         self.tq = wp.to_torch(self.d.actuator_force)         # each motor's torque (N m)
         self.mocap = wp.to_torch(self.d.mocap_pos) if mjm.nmocap else None      # the moving tiles' places (nworld, ntiles, 3)
+        self.xfrc = wp.to_torch(self.d.xfrc_applied)                          # forces applied to bodies (nworld, nbody, 6: force, torque)
         self.tdev = self.qpos.device
         self._qacc = wp.to_torch(self.d.qacc_warmstart) if hasattr(self.d, "qacc_warmstart") else None
         self.graph = None
@@ -268,6 +273,10 @@ class WarpSim:
         """the moving tiles' centres' heights (n, ntiles), for the next step"""
         if self.mocap is not None:
             self.mocap[:, :, 2] = z.to(self.mocap.dtype)
+
+    def set_lift(self, body, fz):
+        """an upward force fz (n, newtons) on one body of each robot, until changed (a help while it learns to stand up)"""
+        self.xfrc[:, body, 2] = fz.to(self.xfrc.dtype)
 
     def set_rows(self, idx, qpos, qvel, ctrl):
         """robots idx start again from qpos, qvel (their motors aimed at ctrl)"""
@@ -314,6 +323,7 @@ class CpuSim:
         self.tq_np = np.zeros((n, mjm.nu))
         self.tq = torch.zeros(n, mjm.nu)
         self.tile_z = None
+        self.lift = None             # (body, forces) an upward help on one body
         self.qpos = torch.zeros(n, mjm.nq)
         self.qvel = torch.zeros(n, mjm.nv)
         self.ctrl = torch.zeros(n, mjm.nu)
@@ -324,12 +334,14 @@ class CpuSim:
 
     def _work(self, part):
         mj, m, D = self.mj, self.m, self.datas
-        tz = self.tile_z
+        tz, lift = self.tile_z, self.lift
         for i in part:
             d = D[i]
             d.ctrl[:] = self.ctrl_np[i]
             if tz is not None:
                 d.mocap_pos[:, 2] = tz[i]
+            if lift is not None:
+                d.xfrc_applied[lift[0], 2] = lift[1][i]
             for _ in range(N_SUB):
                 mj.mj_step(m, d)
             self.qpos_np[i] = d.qpos
@@ -376,6 +388,9 @@ class CpuSim:
 
     def set_tiles(self, z):
         self.tile_z = z.double().numpy() if self.m.nmocap else None
+
+    def set_lift(self, body, fz):
+        self.lift = (int(body), fz.double().numpy())
 
     def sync(self):
         pass
@@ -897,6 +912,152 @@ class WalkEnv:
         return rew, fell | timeout, info
 
 
+def quat_mul(a, b):
+    """the product of quaternions a and b (w, x, y, z), row by row"""
+    import torch
+    aw, ax, ay, az = a.unbind(-1)
+    bw, bx, by, bz = b.unbind(-1)
+    return torch.stack([aw * bw - ax * bx - ay * by - az * bz, aw * bx + ax * bw + ay * bz - az * by,
+                        aw * by - ax * bz + ay * bw + az * bx, aw * bz + ax * by - ay * bx + az * bw], -1)
+
+
+STAND_EP = 500                       # 10 s to get up and stay up
+STAND_SCALES = {"height": 3.0, "upright": 2.0, "pose": 2.0, "feet": 0.5, "still": 1.0, "action_rate": -0.01, "joint_vel": -1e-4,
+                "dof_pos_limits": -1.0}
+
+
+def is_standing(h, tz):
+    """on its feet: the pelvis at walking height and the torso upright"""
+    return (h > 0.65) & (tz > 0.85)
+
+
+class StandEnv(WalkEnv):
+    """Learning to stand up: each episode starts with the robot lying on the floor where a fall left it (falls the physics
+    made: dropped from a random pose, any way round), and it has 10 s to get up and stay up. Rewards: its pelvis high,
+    its torso upright, and once it stands, the standing pose, both feet down and stillness. At first an upward help on
+    its torso (a share of its weight) makes getting up possible; the help is taken away as it succeeds."""
+
+    def __init__(self, sim, mjm, seed=0, noise=1.0, train=True):
+        super().__init__(sim, mjm, seed=seed, vmax=0.0, push=0.0, noise=noise, train=train, terrain="flat", scan=True)
+        import torch
+        self.torso = mjm.body("torso_link").id
+        self.assist = 0.0
+        self.weight = float(mjm.body_subtreemass[mjm.body("pelvis").id]) * 9.81      # the robot alone (not the floor tiles)
+        self.bank = None
+        n = self.n
+        self.up_steps = torch.zeros(n, dtype=torch.long, device=self.dev)
+        self.t_up = torch.full((n,), -1.0, device=self.dev)
+        self.start_standing = torch.zeros(n, dtype=torch.bool, device=self.dev)
+
+    def build_bank(self, rounds=3, log=None):
+        """lying poses: every robot dropped from 1 m in a random pose and turn, holding random joint targets, 2 s to land and settle"""
+        import torch
+        n, dev = self.n, self.dev
+        idx = torch.arange(n, device=dev)
+        keep = []
+        span = self.soft_hi - self.soft_lo
+        for _ in range(rounds):
+            qpos = self.q0.unsqueeze(0).repeat(n, 1)
+            qpos[:, 0:2] = self.U(n, -0.3, 0.3, 2)
+            qpos[:, 2] = self.U(n, 1.0, 1.2)
+            quat = torch.randn(n, 4, device=dev, generator=self.g)
+            qpos[:, 3:7] = quat / quat.norm(dim=-1, keepdim=True)
+            qpos[:, 7:] = torch.maximum(torch.minimum(self.default + self.U(n, -0.3, 0.3, 29) * span, self.soft_hi), self.soft_lo)
+            qvel = torch.zeros(n, self.m.nv, device=dev)
+            qvel[:, 0:6] = self.U(n, -1.0, 1.0, 6)
+            targets = torch.maximum(torch.minimum(self.default + self.U(n, -0.25, 0.25, 29) * span, self.soft_hi), self.soft_lo)
+            self.sim.set_rows(idx, qpos, qvel, targets)
+            self.sim.set_lift(self.torso, torch.zeros(n, device=dev))
+            for _ in range(100):
+                self.sim.step()
+            q = self.sim.qpos.float().clone()
+            ok = ~torch.isnan(q).any(-1) & (self.height() < 0.45) & (self.sim.qvel.float().abs().amax(-1) < 5.0)
+            keep.append(q[ok])
+        self.bank = torch.cat(keep)
+        if log:
+            log("%d lying poses made by dropping the robot (%d rounds)." % (len(self.bank), rounds))
+        return len(self.bank)
+
+    def reset(self, idx, at=None):
+        import torch
+        k = idx.numel()
+        if k == 0:
+            return
+        dev = self.dev
+        if at is not None or self.bank is None or not len(self.bank):
+            qpos = self.q0.unsqueeze(0).repeat(k, 1)
+            stand = torch.ones(k, dtype=torch.bool, device=dev)
+        else:
+            qpos = self.bank[torch.randint(len(self.bank), (k,), device=dev, generator=self.g)].clone()
+            stand = torch.rand(k, device=dev, generator=self.g) < (0.12 if self.train else 0.0)    # some start on their feet: staying up is part of it
+            qpos[stand] = self.q0
+        # any way round, anywhere near the middle
+        yaw = self.U(k, -math.pi, math.pi)
+        qz = torch.stack([torch.cos(yaw / 2), torch.zeros_like(yaw), torch.zeros_like(yaw), torch.sin(yaw / 2)], -1)
+        qpos[:, 3:7] = quat_mul(qz, qpos[:, 3:7])
+        qpos[:, 0:2] = self.U(k, -0.5, 0.5, 2)
+        qvel = torch.zeros(k, self.m.nv, device=dev)
+        self.sim.set_rows(idx, qpos, qvel, qpos[:, 7:])
+        self.cmd[idx] = 0.0
+        self.mode_line[idx] = False
+        self.speed[idx] = 0.0
+        self.phase[idx] = torch.tensor([0.0, math.pi], device=dev)
+        self.phase_dt[idx] = 0.0          # (no gait clock while getting up)
+        self.last_act[idx] = 0.0
+        self.act[idx] = 0.0
+        self.air[idx] = 0.0
+        self.last_contact[idx] = False
+        self.swing_peak[idx] = 0.0
+        self.steps[idx] = 0
+        self.ep_ret[idx] = 0.0
+        self.ep_dist[idx] = 0.0
+        self.fell[idx] = False
+        self.up_steps[idx] = 0
+        self.t_up[idx] = -1.0
+        self.start_standing[idx] = stand
+        self.scan_bias[idx] = self.U(k, -0.02, 0.02) if self.train else 0.0
+
+    def step(self, action):
+        import torch
+        sim = self.sim
+        a = action.clamp(-5.0, 5.0)
+        sim.ctrl.copy_((self.default + a * ACTION_SCALE).to(sim.ctrl.dtype))
+        # the help: a share of its weight lifting the torso while it is low (none once it is up)
+        sim.set_lift(self.torso, self.assist * self.weight * (self.height() < 0.7).float())
+        sim.step()
+        q, v = sim.qpos.float(), sim.qvel.float()
+        h = self.height()
+        tz = self.S("torso_zaxis")[:, 2]
+        standing = is_standing(h, tz)
+        self.up_steps = torch.where(standing, self.up_steps + 1, torch.zeros_like(self.up_steps))
+        newly = (self.up_steps == 25) & (self.t_up < 0)
+        self.t_up = torch.where(newly, self.steps.float() * CTRL_DT, self.t_up)
+        contact = self.contacts()
+        jq, jv = q[:, 7:], v[:, 6:]
+        st = standing.float()
+        r = {}
+        r["height"] = ((h - 0.2) / 0.55).clamp(0.0, 1.0)
+        r["upright"] = tz.clamp(0.0, 1.0) ** 2
+        r["pose"] = torch.exp(-((jq - self.default) ** 2).sum(-1) / 2.0) * st
+        r["feet"] = contact.all(-1).float() * st
+        r["still"] = torch.exp(-(self.S("global_linvel_pelvis") ** 2).sum(-1) / 0.1) * st
+        r["action_rate"] = ((a - self.last_act) ** 2).sum(-1)
+        r["joint_vel"] = (jv ** 2).sum(-1)
+        r["dof_pos_limits"] = ((self.soft_lo - jq).clamp(min=0) + (jq - self.soft_hi).clamp(min=0)).sum(-1)
+        rew = sum(STAND_SCALES[k_] * v_ for k_, v_ in r.items()) * CTRL_DT
+        bad = torch.isnan(q).any(-1) | torch.isnan(v).any(-1)
+        rew = torch.nan_to_num(rew, nan=0.0)
+        self.steps += 1
+        self.last_act = a
+        self.last_contact = contact
+        self.ep_ret += rew
+        timeout = self.steps >= STAND_EP
+        self.fell = bad
+        info = {"fell": bad, "timeout": timeout & ~bad, "terms": r, "standing": standing, "height": h, "upright": tz,
+                "lin": self.S("local_linvel_pelvis"), "gyro": self.S("gyro_pelvis"), "contact": contact}
+        return rew, timeout | bad, info
+
+
 # ── learning: PPO with an actor (the policy: what the robot senses → joint targets) and a critic (how good a moment is,
 # from more than the robot can sense: the privileged state of the simulation) ─────────────────────────────────────────
 import math
@@ -1070,13 +1231,21 @@ class PPO:
         return stats
 
     def state(self):
-        return {"ac": self.ac.state_dict(), "obs_norm": self.on.state(), "priv_norm": self.pn.state(), "lr": self.lr}
+        return {"ac": self.ac.state_dict(), "obs_norm": self.on.state(), "priv_norm": self.pn.state(), "lr": self.lr, "opt": self.opt.state_dict()}
 
     def load(self, st):
-        self.ac.load_state_dict(widen(self.t, st["ac"], self.obs_dim, self.priv_dim))
+        sd = st["ac"]
+        same = sd["actor.0.weight"].shape[1] == self.obs_dim and sd["critic.0.weight"].shape[1] == self.priv_dim
+        self.ac.load_state_dict(widen(self.t, sd, self.obs_dim, self.priv_dim))
         self.on.load(st["obs_norm"], self.dev)
         self.pn.load(st["priv_norm"], self.dev)
         self.lr = float(st.get("lr") or self.lr)
+        # the optimizer's running moments too, when the network is the same shape: training carries on where it was
+        if same and st.get("opt"):
+            try:
+                self.opt.load_state_dict(st["opt"])
+            except Exception:      # noqa: BLE001
+                pass
 
 
 def widen(torch, sd, obs, priv):
@@ -1212,6 +1381,62 @@ def chunks(rows, budget=40000):
         yield i // size, rows[i:i + size], i + size >= len(rows)
 
 
+# ── policies to carry on from ─────────────────────────────────────────────────────────────────────────────────────
+def policy_stamp(path, name):
+    """when a policy was made: the date in its name (humanoid_walk_20261112_1926_64.pt), else its file's time"""
+    import os
+    import re
+    import time
+    m = re.search(r"(\d{8})_(\d{4})", str(name))
+    if m:
+        try:
+            return time.mktime(time.strptime(m.group(1) + m.group(2), "%Y%m%d%H%M"))
+        except ValueError:
+            pass
+    return os.path.getmtime(path)
+
+
+def find_policies(ctx, task, terrain, checkpoint):
+    """The policies a training can carry on from: those wired in (the dataset), and those that stopped runs left on this
+    machine (the checkpoint in their task folder, next to this one). Those that learned this ground come first, then the
+    one with the most experience (the furthest along), then the newest."""
+    import glob
+    import os
+    import torch
+    out = []
+
+    def consider(path, name, where):
+        try:
+            st = torch.load(path, map_location="cpu", weights_only=False)
+        except Exception as e:     # noqa: BLE001
+            ctx.log("Skipped %s: %s" % (name, e))
+            return
+        if st.get("format") != FORMAT:
+            ctx.log("Skipped %s: made for another block or version." % name)
+            return
+        if (st.get("task") or TASK) != task:
+            return                  # (a policy of the other skill: walking, or standing up)
+        out.append({"same": 1 if (st.get("terrain") or "flat") == terrain else 0, "steps": int(st.get("steps") or 0),
+                    "stamp": policy_stamp(path, name), "name": str(name), "where": where, "st": st, "path": path})
+    for f in (ctx.inputs.get("policy") or []):
+        if str(f.name).endswith(".pt"):
+            consider(f.path, f.name, "dataset")
+    here = os.getcwd()
+    jobs = os.path.dirname(os.path.dirname(here))
+    if os.path.basename(jobs).lower() == "jobs":
+        paths = sorted(glob.glob(os.path.join(jobs, "*", "*", checkpoint)), key=os.path.getmtime, reverse=True)[:30]
+        for pth in paths:
+            if os.path.dirname(os.path.abspath(pth)) == os.path.abspath(here):
+                continue
+            consider(pth, "the policy run #%s left on this machine" % os.path.basename(os.path.dirname(os.path.dirname(pth))), "machine")
+    out.sort(key=lambda x: (x["same"], x["steps"], x["stamp"]), reverse=True)
+    return out
+
+
+def start_over(p):
+    return str(p.get("training") or "").lower().startswith("start") or bool(p.get("from_scratch"))
+
+
 # ── learning to walk ─────────────────────────────────────────────────────────────────────────────────────────────────
 def learn_run(ctx):
     import collections
@@ -1237,30 +1462,22 @@ def learn_run(ctx):
     dev = sim.tdev
     env = WalkEnv(sim, mjm, seed=seed, vmax=vmax, push=float(p.get("push") if p.get("push") not in (None, "") else 1.5), terrain=terrain, scan=True)
     algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, 29, horizon=24)
-    found = []
-    for f in (ctx.inputs.get("policy") or []):
-        if str(f.name).endswith(".pt"):
-            try:
-                st_ = torch.load(f.path, map_location="cpu", weights_only=False)
-                if st_.get("format") != FORMAT or st_.get("task") != TASK:
-                    ctx.log("Skipped %s: made for another task or version." % f.name)
-                    continue
-                m_ = re.search(r"(\d{8}_\d{4})", str(f.name))
-                same = 1 if (st_.get("terrain") or "flat") == terrain else 0     # one that learned this ground first, then the best
-                found.append((same, float(st_.get("score") or 0), m_.group(1) if m_ else "", os.path.getmtime(f.path), f, st_))
-            except Exception as e:     # noqa: BLE001
-                ctx.log("Skipped %s: %s" % (f.name, e))
     steps_done, warm = 0, 0
-    if found and not bool(p.get("from_scratch")):
-        found.sort(key=lambda x: x[:4], reverse=True)
-        f, st = found[0][4], found[0][5]
+    found = [] if start_over(p) else find_policies(ctx, TASK, terrain, "policy_checkpoint.pt")
+    if start_over(p):
+        ctx.log("Starting over (Training: Start over): a new policy that learns from nothing.")
+    elif found:
+        pick = found[0]
+        st = pick["st"]
         algo.load(st)
         steps_done = int(st.get("steps") or 0)
         if (st.get("terrain") or "flat") != terrain or int(st.get("obs_dim") or 0) < OBS_DIM:
             warm = 25          # new ground or new inputs: the critic learns what they are worth first, the walk is left as it is
         if int(st.get("obs_dim") or 0) < OBS_DIM:
             ctx.log("It learned blind: it now gets an elevation map of the ground ahead (from its head camera), which it learns to use.")
-        ctx.log("Continuing from %s (walk score %.0f%% on %s, %.0f million steps of experience)." % (f.name, float(st.get("score") or 0), GROUND_NAME.get(st.get("terrain") or "flat", "?"), steps_done / 1e6))
+        ctx.log("Continuing from %s (walk score %.0f%% on %s, %.0f million steps of experience)." % (pick["name"], float(st.get("score") or 0), GROUND_NAME.get(st.get("terrain") or "flat", "?"), steps_done / 1e6))
+    else:
+        ctx.log("No policy to carry on from yet: a new one learns from nothing.")
     # The run's time limit (Stop after): learning ends a few minutes before it, so the policy is written and kept
     # rather than lost when the worker stops the block.
     left = ctx.time_left() if hasattr(ctx, "time_left") else None
@@ -1377,6 +1594,158 @@ def learn_run(ctx):
     return {"walk_score": round(max(0.0, best, score()), 1), "steps_m": round(steps_done / 1e6, 1)}
 
 
+# ── learning to stand up after a fall ───────────────────────────────────────────────────────────────────────────────
+ASSIST0 = 0.8          # the help it starts with: an upward pull on its torso of 80% of its weight, while it is low
+
+
+def stand_run(ctx):
+    import collections
+    import csv
+    import math
+    import os
+    import shutil
+    import time
+    import mujoco
+    import torch
+    p = ctx.params
+    n = int(p.get("robots") or 4096)
+    minutes = float(p.get("minutes") or 90)
+    replay_every = float(p.get("replay_every") or 20)
+    seed = int(p.get("seed") or 1)
+    ch_bot, ch_train, ch_ctl = p.get("robot_channel") or "robot", p.get("channel") or "train", p.get("control_channel") or "control"
+    torch.manual_seed(seed)
+    mjm = load_model(mujoco, "flat")
+    sim, label = make_sim(mjm, n, p.get("accelerator") or "auto", ctx.log)
+    n = sim.n
+    dev = sim.tdev
+    env = StandEnv(sim, mjm, seed=seed)
+    algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, 29, horizon=32)
+    steps_done, assist = 0, ASSIST0
+    found = [] if start_over(p) else find_policies(ctx, "standup", "flat", "standup_checkpoint.pt")
+    if start_over(p):
+        ctx.log("Starting over (Training: Start over): a new policy that learns from nothing.")
+    elif found:
+        st = found[0]["st"]
+        algo.load(st)
+        steps_done = int(st.get("steps") or 0)
+        assist = float(st.get("assist") if st.get("assist") is not None else ASSIST0)
+        ctx.log("Continuing from %s (stand-up score %.0f%%, help %.0f%% of its weight, %.0f million steps of experience)." % (found[0]["name"], float(st.get("score") or 0), 100 * assist, steps_done / 1e6))
+    else:
+        ctx.log("No stand-up policy to carry on from yet: a new one learns from nothing.")
+    left = ctx.time_left() if hasattr(ctx, "time_left") else None
+    if left is not None and left / 60.0 - 3.0 < minutes:
+        cut = max(1.0, left / 60.0 - 3.0)
+        ctx.log("The run stops after %.0f minutes (Stop after): learning ends at %.0f minutes instead of %.0f, so the policy is kept. Raise Stop after to learn longer." % (ctx.max_minutes, cut, minutes))
+        minutes = cut
+    rounds = max(2, min(12, int(math.ceil(6000.0 / n))))
+    env.build_bank(rounds, ctx.log)
+    env.assist = assist
+    ctx.log("Learning to stand up on the flat floor, on %s: %d robots at once, for up to %.0f minutes. Each try starts lying where a fall left it, with %.0f s to get up and stay up." % (label, n, minutes, STAND_EP * CTRL_DT))
+    ctx.log("At first an upward help on its torso (%.0f%% of its weight) makes it possible; the help goes down as it succeeds, to none." % (100 * assist))
+    env.reset_all()
+    a_obs, a_priv = env.obs()
+    ctx.telemetry(ch_bot, {"format": "esasim.humanoid/1", "kind": "robot", "robot": robot_info(mjm, "flat")})
+    curve = open(ctx.output("curve", "standup.csv"), "w", newline="", encoding="utf-8")
+    cw = csv.writer(curve)
+    cw.writerow(["minutes", "iteration", "steps", "stand_score", "up_pct", "time_to_up_s", "assist_pct", "reward", "steps_per_s"])
+    hist = collections.deque(maxlen=max(300, min(4000, n)))     # finished tries from the floor: (up at the end, seconds to get up, return)
+    t_start, last_tel, last_replay, last_cut = time.time(), 0.0, -1e9, 0
+    it, best, stop_reason = 0, -1.0, "time"
+    out_path = os.path.join(os.getcwd(), "standup_checkpoint.pt")
+    rec, rec_ep = [], 0
+
+    def up_rate():
+        return sum(h[0] for h in hist) / len(hist) if hist else 0.0
+
+    def score():
+        if len(hist) < 100:
+            return 0.0
+        return 100.0 * up_rate() * (1.0 - env.assist / ASSIST0)
+
+    def save(note):
+        st = algo.state()
+        st.update({"format": FORMAT, "task": "standup", "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": 29, "score": score(),
+                   "note": note, "steps": steps_done, "device": label, "minutes": (time.time() - t_start) / 60.0, "assist": env.assist,
+                   "up_pct": 100.0 * up_rate(), "action_scale": ACTION_SCALE, "default": env.default.cpu(), "ctrl_dt": CTRL_DT, "terrain": "flat"})
+        torch.save(st, out_path)
+
+    try:
+        while True:
+            elapsed = time.time() - t_start
+            if elapsed > minutes * 60:
+                break
+            if any(isinstance(m.get("data") if isinstance(m, dict) else None, dict) and str(m["data"].get("control", "")).lower() in ("finish now", "finish")
+                   for m in ctx.messages(ch_ctl)):
+                stop_reason = "asked"
+                break
+            t0 = time.time()
+            for t in range(algo.T):
+                act = algo.act(a_obs, a_priv, t)
+                rew, done, info = env.step(act)
+                o2, p2 = env.obs()
+                algo.record(t, rew, done, info["timeout"], p2)
+                if int(env.steps[0]) % 2 == 0:
+                    rec.append(frame_row(env, 0, float(env.steps[0]) * CTRL_DT))
+                if bool(done.any()):
+                    idx = done.nonzero(as_tuple=False).flatten()
+                    up = (env.up_steps[idx] >= 25) & ~info["fell"][idx]
+                    for u_, tu, r_, s_ in zip(up.tolist(), env.t_up[idx].tolist(), env.ep_ret[idx].tolist(), env.start_standing[idx].tolist()):
+                        if not s_:
+                            hist.append((1.0 if u_ else 0.0, tu if tu >= 0 else None, r_))
+                    if bool(done[0]):
+                        if rec and time.time() - last_replay > replay_every and len(rec) > 25 and not bool(env.start_standing[0]):
+                            last_replay = time.time()
+                            rec_ep += 1
+                            ok, tu = bool(up[0]), float(env.t_up[0])
+                            res = {"fell": not ok, "seconds": round(float(env.steps[0]) * CTRL_DT, 1), "distance": 0.0}
+                            lab = ("Try %d: up %sin %.1f s" % (rec_ep, "" if env.assist > 0.005 else "on its own ", tu) if ok and tu >= 0 else "Try %d: still down after %.0f s" % (rec_ep, res["seconds"])) + \
+                                  (" (help %.0f%% of its weight)" % (100 * env.assist) if env.assist > 0.005 else "")
+                            for k, part, last in chunks(rec):
+                                ctx.telemetry(ch_bot, {"format": "esasim.humanoid/1", "kind": "training", "ep": rec_ep, "seq": k, "last": last, "frames": part,
+                                                       "result": res, "label": lab})
+                        rec = []
+                    env.reset(idx)
+                    sim.refresh()
+                    o2, p2 = env.obs()
+                a_obs, a_priv = o2, p2
+            stats = algo.update(a_priv)
+            it += 1
+            steps_done += algo.T * n
+            sps = algo.T * n / max(1e-6, time.time() - t0)
+            # less help as it succeeds: more than 60% of the tries from the floor up and staying up
+            if env.assist > 0 and len(hist) >= min(300, max(100, n)) and it - last_cut >= 10 and up_rate() > 0.6:
+                env.assist = max(0.0, env.assist - 0.05) if env.assist > 0.06 else 0.0
+                last_cut = it
+                hist.clear()
+                ctx.log("It gets up in most tries: the help goes down to %.0f%% of its weight." % (100 * env.assist) if env.assist > 0 else
+                        "It gets up with almost no help: from now on it gets up on its own, with no help at all.")
+            sc = score()
+            if sc > best and len(hist) >= 100 and it > 20:
+                best = sc
+                save("best so far")
+            if time.time() - last_tel > 2.0 or it == 1:
+                last_tel = time.time()
+                ups = [h[1] for h in hist if h[0] and h[1] is not None]
+                row = {"iteration": it, "minutes": round(elapsed / 60, 2), "steps_m": round(steps_done / 1e6, 2), "stand_score": round(sc, 1),
+                       "up_pct": round(100.0 * up_rate(), 1), "time_to_up": round(sum(ups) / len(ups), 2) if ups else None,
+                       "assist": round(100.0 * env.assist, 1), "reward": round(sum(h[2] for h in hist) / max(1, len(hist)), 2),
+                       "steps_per_s": round(sps), "std": round(stats["std"], 3), "kl": round(stats["kl"], 4), "lr": stats["lr"]}
+                ctx.telemetry(ch_train, row)
+                cw.writerow([row["minutes"], it, steps_done, row["stand_score"], row["up_pct"], row["time_to_up"], row["assist"], row["reward"], row["steps_per_s"]])
+                curve.flush()
+                ctx.progress(min(99, 100 * elapsed / (minutes * 60)), "stand-up score %.0f%% · up %.0f%% · help %.0f%%" % (sc, row["up_pct"], row["assist"]))
+    finally:
+        curve.close()
+    if best < 0 or score() >= best:
+        save("final")
+    final = max(0.0, best, score())
+    name = "humanoid_standup_%s_%02d.pt" % (time.strftime("%Y%m%d_%H%M"), int(round(final)))
+    shutil.copyfile(out_path, ctx.output("policy", name))
+    ctx.log("Policy written: %s (stand-up score %.0f%%: the share of falls it gets up from and stays up, less while it still needs help; help now %.0f%% of its weight)." % (name, final, 100 * env.assist))
+    ctx.log("Done (%s): %d iterations, %.0f million steps in %.1f minutes." % ({"time": "time is up", "asked": "finished on request"}[stop_reason], it, steps_done / 1e6, (time.time() - t_start) / 60))
+    return {"stand_score": round(final, 1), "help_pct": round(100 * env.assist, 1), "steps_m": round(steps_done / 1e6, 1)}
+
+
 # ── walking with a learned policy, live ─────────────────────────────────────────────────────────────────────────────
 def zone_at(x, y):
     """the part of the circuit at x, y: (key, kind, what it is)"""
@@ -1402,11 +1771,14 @@ def walk_run(ctx):
     import torch
     p = ctx.params
     torch.set_num_threads(1)
-    pols = []
+    pols, ups = [], []
     for f in (ctx.inputs.get("policy") or []):
         if str(f.name).endswith(".pt"):
             try:
                 h = torch.load(f.path, map_location="cpu", weights_only=False)
+                if h.get("format") == FORMAT and h.get("task") == "standup":
+                    ups.append((policy_stamp(f.path, f.name), f))
+                    continue
                 if h.get("format") != FORMAT or h.get("task") != TASK:
                     ctx.log("Skipped %s: made for another task or version." % f.name)
                     continue
@@ -1422,6 +1794,15 @@ def walk_run(ctx):
     pol = (pick or pols)[0][2]
     act, st = load_policy(pol.path)
     sees = int(st.get("obs_dim") or OBS_BASE) > OBS_BASE
+    walk_dim = int(st.get("obs_dim") or OBS_BASE)
+    up_act, up_st = None, None
+    if ups and str(p.get("after_fall") or "Get up on its own").lower().startswith("get up"):
+        ups.sort(key=lambda x: x[0], reverse=True)
+        up_act, up_st = load_policy(ups[0][1].path)
+        ctx.log("Stand-up policy %s: stand-up score %.0f%%%s. After a fall it gets up on its own (put back on its feet if it is still down after 10 s)." % (
+            ups[0][1].name, float(up_st.get("score") or 0), (", learned with help (%.0f%% of its weight) still on" % (100 * float(up_st.get("assist") or 0))) if float(up_st.get("assist") or 0) > 0.005 else ""))
+    elif not ups:
+        ctx.log("No stand-up policy among the policies: after a fall it is put back on its feet (Learn to stand up teaches it to get up on its own).")
     terrain = terrain_of(p, "circuit")
     ctx.log("Walking policy %s: walk score %.0f%% on %s, %.0f million steps of experience on %s; %s." % (
         pol.name, float(st.get("score") or 0), GROUND_NAME.get(st.get("terrain") or "flat", "?"), float(st.get("steps") or 0) / 1e6,
@@ -1431,7 +1812,7 @@ def walk_run(ctx):
     ch, ch_ev, ch_ctl = p.get("robot_channel") or "robot", p.get("events_channel") or "event", p.get("control_channel") or "control"
     mjm = load_model(mujoco, terrain)
     sim = CpuSim(mjm, 1, threads=1)
-    env = WalkEnv(sim, mjm, seed=int(time.time()) % 100000, vmax=1.5, push=0.0, noise=0.0, train=False, terrain=terrain, scan=sees)
+    env = WalkEnv(sim, mjm, seed=int(time.time()) % 100000, vmax=1.5, push=0.0, noise=0.0, train=False, terrain=terrain, scan=sees or up_act is not None)
     env.new_tiles(torch.zeros(1, dtype=torch.long), seed=20261112)       # (the same tiles every walk)
     ctx.telemetry(ch, {"format": "esasim.humanoid/1", "kind": "robot", "robot": robot_info(mjm, terrain, sees)})
     circuit = terrain == "circuit"
@@ -1464,6 +1845,27 @@ def walk_run(ctx):
     start()
     t_wall0 = time.time()
     sim_t, run, frames, last_send, fell_at = 0.0, 1, [], time.time(), None
+    getting_up, up_n = False, 0
+
+    def to_ground():
+        """getting up: no command and no gait clock (as it learned it)"""
+        env.mode_line[:] = False
+        env.speed[:] = 0.0
+        env.cmd[:] = 0.0
+        env.phase_dt[:] = 0.0
+        env.phase[:] = torch.tensor([0.0, math.pi])
+
+    def back_to_walking():
+        """up: walking again, from where it got up (on its line, or on the circuit from the point it reached)"""
+        env.phase_dt[:] = 2 * math.pi * CTRL_DT * 1.4
+        env.phase[:] = torch.tensor([0.0, math.pi])
+        if circuit:
+            env.put_on_path(one, int(env.pidx[0]), dirn)        # (its point of the circuit, followed while it got up)
+        else:
+            ly, lyaw = float(env.line_y[0]), float(env.line_yaw[0])
+            env.line_yaw[:] = lyaw
+            env.line_y[:] = ly
+        env.mode_line[:] = True
     zone, lap, lap_t0, falls_lap, s_last = None, 1, 0.0, 0, 0
     hold = 1.5        # s standing still before it sets off
     ctx.telemetry(ch_ev, {"text": ("The G1 is on the circuit (%s): it sets off at %.1f m/s" % ("counterclockwise" if dirn > 0 else "clockwise", speed)) if circuit
@@ -1501,6 +1903,7 @@ def walk_run(ctx):
                 wh = float(env.path_heading()[0])
                 ctx.telemetry(ch_ev, {"text": "A push (0.8 m/s, from the %s)" % ("left" if math.sin(float(ang) - wh) > 0 else "right")})
             elif c in ("reset", "stand up", "restart", "back to the start"):
+                getting_up, fell_at = False, None
                 start()
                 sim_t += 0.5
                 run += 1
@@ -1513,9 +1916,13 @@ def walk_run(ctx):
             time.sleep(min(0.01, t_due - now))
             continue
         # one control step: 20 ms of the robot's time
-        env.speed[:] = 0.0 if hold > 0 else speed
-        hold -= CTRL_DT
-        a = act(o)
+        if getting_up:
+            to_ground()
+            a = up_act(o)
+        else:
+            env.speed[:] = 0.0 if hold > 0 else speed
+            hold -= CTRL_DT
+            a = act(o[:, :walk_dim])
         rew, done, info = env.step(a)
         sim_t += CTRL_DT
         o, _ = env.obs(noisy=False)
@@ -1524,8 +1931,27 @@ def walk_run(ctx):
         if bool(info["fell"][0]) and fell_at is None:
             fell_at = sim_t
             falls_lap += 1
-            ctx.telemetry(ch_ev, {"text": "It fell%s: back up in 3 s" % ((" on " + zone_text(zone, 0).split(":")[0].split(" (")[0].lower().replace(" down", "").replace(" up", "")) if zone else "")})
-        if fell_at is not None and sim_t - fell_at > 3.0:
+            where = (" on " + zone_text(zone, 0).split(":")[0].split(" (")[0].lower().replace(" down", "").replace(" up", "")) if zone else ""
+            if up_act is not None:
+                getting_up, up_n = True, 0
+                to_ground()
+                ctx.telemetry(ch_ev, {"text": "It fell%s: it gets up on its own" % where})
+            else:
+                ctx.telemetry(ch_ev, {"text": "It fell%s: back up in 3 s" % where})
+        if getting_up:
+            hq = float(env.height()[0])
+            tz_ = float(env.S("torso_zaxis")[0, 2])
+            up_n = up_n + 1 if (hq > 0.65 and tz_ > 0.85) else 0
+            if up_n >= 25:           # up and steady for half a second: walking again
+                ctx.telemetry(ch_ev, {"text": "Up on its own in %.1f s: walking on" % (sim_t - fell_at)})
+                getting_up, fell_at = False, None
+                back_to_walking()
+                hold = 0.5
+        if fell_at is not None and sim_t - fell_at > (10.0 if getting_up else 3.0):
+            if getting_up:
+                ctx.telemetry(ch_ev, {"text": "Still down after 10 s: put back on its feet"})
+            getting_up = False
+            back_to_walking()
             fell_at = None
             if circuit:      # back on its feet on the circuit's line, a step further on
                 start(i=(int(env.pidx[0]) + 4 * dirn) % env.M)
@@ -1573,4 +1999,6 @@ def run(ctx):
     what = str(ctx.params.get("mode") or "Learn to walk").lower()
     if what.startswith("walk"):
         return walk_run(ctx)
+    if "stand" in what:
+        return stand_run(ctx)
     return learn_run(ctx)
