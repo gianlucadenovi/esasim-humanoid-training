@@ -40,7 +40,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 ### Blueprints in this repository
 
 - [1 · Learn to walk](blueprints/1-learn-to-walk.json) · 9 blocks · version 1
-- [2 · Walk](blueprints/2-walk.json) · 6 blocks · version 1
+- [2 · Walk](blueprints/2-walk.json) · 6 blocks · version 2
 
 ### Workspace blocks it uses
 

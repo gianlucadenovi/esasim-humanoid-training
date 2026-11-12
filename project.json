@@ -18,7 +18,7 @@
         {
             "name": "2 · Walk",
             "file": "blueprints/2-walk.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 6
         }
     ],

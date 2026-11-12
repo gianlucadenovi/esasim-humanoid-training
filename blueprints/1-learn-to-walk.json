@@ -6,7 +6,7 @@
     "name": "1 · Learn to walk",
     "description": "Thousands of G1 humanoids at once on the GPU learn to walk straight at the speed asked, pushed now and then; one attempt is replayed in 3D every 20 s. The policy goes to the humanoid-policy dataset.",
     "published_version": 1,
-    "updated": "2026-11-12 03:57:52",
+    "updated": "2026-11-12 04:11:44",
     "graph": {
         "nodes": [
             {
@@ -235,7 +235,44 @@
         ],
         "notes": [],
         "dash": {
-            "items": []
+            "items": {
+                "view": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 6,
+                    "h": 10
+                },
+                "cam_side": {
+                    "x": 0,
+                    "y": 10,
+                    "w": 6,
+                    "h": 11
+                },
+                "score": {
+                    "x": 6,
+                    "y": 9,
+                    "w": 6,
+                    "h": 6
+                },
+                "episode": {
+                    "x": 6,
+                    "y": 0,
+                    "w": 6,
+                    "h": 6
+                },
+                "speed": {
+                    "x": 6,
+                    "y": 15,
+                    "w": 6,
+                    "h": 6
+                },
+                "numbers": {
+                    "x": 6,
+                    "y": 6,
+                    "w": 6,
+                    "h": 3
+                }
+            }
         }
     }
 }
