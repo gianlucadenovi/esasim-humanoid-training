@@ -1,0 +1,163 @@
+{
+    "id": "ws-humanoid-g1",
+    "version": "1",
+    "name": "Humanoid G1",
+    "category": "Robotics",
+    "icon": "bot",
+    "side": "backend",
+    "customizable": true,
+    "summary": "A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, then walks live in 3D where you steer and push it.",
+    "help": "A Unitree G1 humanoid (1.3 m, 35 kg, 29 joints) in MuJoCo, the physics engine of robotics research: its links with their masses and inertias, its joints with their limits, its motors with their torque limits and position loops, its feet touching the ground with friction (the model of MuJoCo Menagerie and MuJoCo Playground).\n\nLearn to walk: a policy (a neural network that, 50 times a second, turns what the robot senses into targets for its 29 joints: its speed and turn rates, which way is down, the angle and speed of each joint, the speed it is asked for and the beat of its steps) learns by trial and error (PPO) to walk at the speed asked, straight along a line, and to turn when asked. Many robots learn at once: 4096 on an NVIDIA GPU with MuJoCo Warp (the whole simulation on the card), up to 512 on the CPU (much slower: use it to try, not to learn). They are pushed now and then and start in odd poses, so the policy learns to catch itself. It is rewarded for walking at the speed asked, lifting its feet in step and keeping upright, and penalised for falling, slipping, jerking and straining its joints. Every few seconds one robot's episode is replayed in the 3D view (channel robot); the numbers go to channel train: walk_score (the share of a straight walk at the speed asked it does), fell (% of episodes ending in a fall), speed_err, episode_s, distance. Finish now (control channel) stops and keeps the best policy. The policy (.pt) goes to the policy output, the learning curve to curve. With a policy wired in, it carries on learning from it (unless Start from scratch).\n\nWalk: the newest policy wired in (or the one named in Policy file) walks the robot live, in real time, in the 3D view (esasim.humanoid/1) along a lane; from the view's bar: speed, heading, Push (a shove of 0.8 m/s from the side) and Reset. A fall gets it back on its feet after 3 s. What happens goes to channel event.\n\nPackages: torch, mujoco, and for the GPU mujoco-warp (with warp-lang). Expect about 100 million steps for a good walk: about an hour on a recent NVIDIA GPU.",
+    "inputs": [
+        {
+            "id": "policy",
+            "label": "Policy",
+            "type": "files",
+            "many": true,
+            "optional": true,
+            "formats": [
+                "pt"
+            ],
+            "help": "A walking policy (.pt) from Learn to walk: Walk drives the robot with it; Learn to walk carries on from it"
+        }
+    ],
+    "outputs": [
+        {
+            "id": "policy",
+            "label": "Policy",
+            "type": "files",
+            "formats": [
+                "pt"
+            ],
+            "help": "Learn to walk: humanoid_walk_<date>_<NN>.pt, the best policy learned (network, input scaling, walk score)"
+        },
+        {
+            "id": "curve",
+            "label": "Learning curve",
+            "type": "table",
+            "formats": [
+                "csv"
+            ],
+            "help": "Learn to walk: training.csv"
+        }
+    ],
+    "params": [
+        {
+            "key": "mode",
+            "label": "What to do",
+            "type": "select",
+            "default": "Learn to walk",
+            "options": [
+                "Learn to walk",
+                "Walk"
+            ]
+        },
+        {
+            "key": "accelerator",
+            "label": "Run on",
+            "type": "select",
+            "default": "auto",
+            "options": [
+                "auto",
+                "NVIDIA GPU",
+                "CPU"
+            ],
+            "help": "auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU"
+        },
+        {
+            "key": "robots",
+            "label": "Robots learning at once",
+            "type": "number",
+            "default": 4096,
+            "min": 16,
+            "max": 16384,
+            "help": "Learn to walk; at most 512 on the CPU"
+        },
+        {
+            "key": "minutes",
+            "label": "Minutes",
+            "type": "number",
+            "default": 90,
+            "min": 1,
+            "max": 1440,
+            "help": "How long it learns (Learn to walk) or walks (Walk)"
+        },
+        {
+            "key": "max_speed",
+            "label": "Top speed asked (m/s)",
+            "type": "number",
+            "default": 1,
+            "min": 0.2,
+            "max": 1.5
+        },
+        {
+            "key": "push",
+            "label": "Pushes up to (m/s)",
+            "type": "number",
+            "default": 1.5,
+            "min": 0,
+            "max": 3,
+            "help": "A shove every 5 to 10 s while it learns; 0: none"
+        },
+        {
+            "key": "replay_every",
+            "label": "Replay every (s)",
+            "type": "number",
+            "default": 20,
+            "min": 5,
+            "max": 600,
+            "help": "How often an episode is replayed in the 3D view"
+        },
+        {
+            "key": "seed",
+            "label": "Seed",
+            "type": "number",
+            "default": 1
+        },
+        {
+            "key": "from_scratch",
+            "label": "Start from scratch",
+            "type": "bool",
+            "default": false,
+            "help": "Ignore a policy wired in"
+        },
+        {
+            "key": "speed",
+            "label": "Walking speed (m/s)",
+            "type": "number",
+            "default": 0.6,
+            "min": 0,
+            "max": 1.5,
+            "help": "Walk: the speed it starts at (the view's slider changes it)"
+        },
+        {
+            "key": "heading",
+            "label": "Heading (degrees)",
+            "type": "number",
+            "default": 0,
+            "min": -180,
+            "max": 180,
+            "help": "Walk"
+        },
+        {
+            "key": "policy_file",
+            "label": "Policy file",
+            "type": "text",
+            "default": "",
+            "help": "Walk: the name of the .pt to use among those wired in (empty: the newest)"
+        }
+    ],
+    "hardware": [
+        "cpu",
+        "nvidia"
+    ],
+    "packages": [
+        "torch",
+        "mujoco>=3.3",
+        "mujoco-warp",
+        "warp-lang"
+    ],
+    "esasim": {
+        "version": 1
+    }
+}

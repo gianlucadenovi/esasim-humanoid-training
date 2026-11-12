@@ -1,0 +1,149 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 43
+    },
+    "name": "2 · Walk",
+    "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
+    "published_version": 1,
+    "updated": "2026-11-12 03:57:58",
+    "graph": {
+        "nodes": [
+            {
+                "id": "policy",
+                "type": "dataset",
+                "x": -380,
+                "y": 200,
+                "params": {
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Policies: pick humanoid-policy (made by flow 1)"
+            },
+            {
+                "id": "walk",
+                "type": "ws-humanoid-g1",
+                "x": 0,
+                "y": 200,
+                "params": {
+                    "mode": "Walk",
+                    "accelerator": "CPU",
+                    "minutes": 30,
+                    "speed": 0.6,
+                    "heading": 0,
+                    "policy_file": ""
+                },
+                "title": "G1: walk"
+            },
+            {
+                "id": "tel",
+                "type": "telemetry",
+                "x": 380,
+                "y": 200,
+                "params": {
+                    "interval": 0.25,
+                    "channels": "robot,event",
+                    "keep": 400
+                },
+                "title": "The walk"
+            },
+            {
+                "id": "main",
+                "type": "viewer-3d",
+                "x": 1100,
+                "y": -160,
+                "params": {
+                    "quality": "high",
+                    "events_channel": "event",
+                    "controls": "button Push\nbutton Reset\nslider speed 0 1.5 0.6 0.05\nslider heading -180 180 0 5",
+                    "control_channel": "control",
+                    "camera": "free"
+                },
+                "title": "The G1 walking (director)"
+            },
+            {
+                "id": "cam_follow",
+                "type": "viewer-3d",
+                "x": 1120,
+                "y": 80,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: follow"
+                },
+                "title": "Behind it"
+            },
+            {
+                "id": "cam_front",
+                "type": "viewer-3d",
+                "x": 1120,
+                "y": 320,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: front"
+                },
+                "title": "In front of it"
+            }
+        ],
+        "edges": [
+            {
+                "id": "policy.files>walk.policy",
+                "from": {
+                    "node": "policy",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "walk",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "walk.telemetry>tel.from",
+                "from": {
+                    "node": "walk",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel.stream>main.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "main",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_follow.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_follow",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_front.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_front",
+                    "port": "scene"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}
