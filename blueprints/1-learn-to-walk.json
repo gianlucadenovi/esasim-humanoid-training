@@ -5,8 +5,8 @@
     },
     "name": "1 · Learn to walk",
     "description": "Thousands of G1 humanoids at once on the GPU learn to walk straight at the speed asked, pushed now and then; one attempt is replayed in 3D every 20 s. The policy goes to the humanoid-policy dataset.",
-    "published_version": 1,
-    "updated": "2026-11-12 04:11:44",
+    "published_version": 2,
+    "updated": "2026-11-12 14:28:21",
     "graph": {
         "nodes": [
             {
@@ -17,6 +17,7 @@
                 "params": {
                     "mode": "Learn to walk",
                     "accelerator": "NVIDIA GPU",
+                    "terrain": "Flat floor",
                     "robots": 4096,
                     "minutes": 90,
                     "max_speed": 1,

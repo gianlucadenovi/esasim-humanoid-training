@@ -3,10 +3,10 @@
         "kind": "blueprint",
         "flow_id": 43
     },
-    "name": "2 · Walk",
+    "name": "2 · Walk the course",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
     "published_version": 2,
-    "updated": "2026-11-12 13:23:40",
+    "updated": "2026-11-12 14:28:29",
     "graph": {
         "nodes": [
             {
@@ -19,7 +19,7 @@
                     "version": "latest",
                     "pattern": "*.pt"
                 },
-                "title": "Policies: pick humanoid-policy (made by flow 1)"
+                "title": "Policies: humanoid-policy (made by flows 1 and 3)"
             },
             {
                 "id": "walk",
@@ -29,12 +29,14 @@
                 "params": {
                     "mode": "Walk",
                     "accelerator": "CPU",
+                    "terrain": "Test course",
                     "minutes": 30,
                     "speed": 0.6,
                     "heading": 0,
+                    "laps": true,
                     "policy_file": ""
                 },
-                "title": "G1: walk"
+                "title": "G1: walk the course"
             },
             {
                 "id": "tel",
@@ -60,7 +62,39 @@
                     "control_channel": "control",
                     "camera": "free"
                 },
-                "title": "The G1 walking (director)"
+                "title": "The G1 on the course (director)"
+            },
+            {
+                "id": "cam_eyes",
+                "type": "viewer-3d",
+                "x": 1460,
+                "y": -160,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: eyes"
+                },
+                "title": "Its head camera"
+            },
+            {
+                "id": "cam_depth",
+                "type": "viewer-3d",
+                "x": 1460,
+                "y": 80,
+                "params": {
+                    "quality": "fast",
+                    "camera": "humanoid: depth"
+                },
+                "title": "Its depth camera"
+            },
+            {
+                "id": "telemetry",
+                "type": "viewer-3d",
+                "x": 1100,
+                "y": 560,
+                "params": {
+                    "camera": "humanoid: telemetry"
+                },
+                "title": "Telemetry"
             },
             {
                 "id": "cam_follow",
@@ -116,6 +150,39 @@
                 },
                 "to": {
                     "node": "main",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_eyes.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_eyes",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_depth.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_depth",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>telemetry.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "telemetry",
                     "port": "scene"
                 }
             },
