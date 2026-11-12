@@ -6,7 +6,7 @@
     "name": "4 · Learn to stand up",
     "description": "Thousands of G1s lying where a fall left them learn to get up and stay up on the GPU, with a help taken away as they succeed; the policy goes to the humanoid-policy dataset, where 3 · Circuit test uses it after each fall.",
     "published_version": 1,
-    "updated": "2026-11-12 20:27:23",
+    "updated": "2026-11-12 20:39:16",
     "graph": {
         "nodes": [
             {
@@ -257,7 +257,44 @@
         ],
         "notes": [],
         "dash": {
-            "items": []
+            "items": {
+                "view": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 6,
+                    "h": 11
+                },
+                "cam_side": {
+                    "x": 0,
+                    "y": 11,
+                    "w": 6,
+                    "h": 10
+                },
+                "score": {
+                    "x": 6,
+                    "y": 9,
+                    "w": 6,
+                    "h": 6
+                },
+                "time_up": {
+                    "x": 6,
+                    "y": 0,
+                    "w": 6,
+                    "h": 6
+                },
+                "reward": {
+                    "x": 6,
+                    "y": 15,
+                    "w": 6,
+                    "h": 6
+                },
+                "numbers": {
+                    "x": 6,
+                    "y": 6,
+                    "w": 6,
+                    "h": 3
+                }
+            }
         }
     }
 }

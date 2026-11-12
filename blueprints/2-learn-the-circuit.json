@@ -5,7 +5,7 @@
     },
     "name": "2 · Learn the circuit",
     "description": "Carries on from the best flat-floor policy on the test course (bumps, a slope up and down, blocks), thousands of robots at once on the GPU; the policy goes back to the humanoid-policy dataset for flow 2 to walk with.",
-    "published_version": 4,
+    "published_version": 5,
     "updated": "2026-11-12 20:27:12",
     "graph": {
         "nodes": [
