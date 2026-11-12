@@ -1,0 +1,263 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 52
+    },
+    "name": "4 · Learn to stand up",
+    "description": "Thousands of G1s lying where a fall left them learn to get up and stay up on the GPU, with a help taken away as they succeed; the policy goes to the humanoid-policy dataset, where 3 · Circuit test uses it after each fall.",
+    "published_version": 0,
+    "updated": "2026-11-12 20:27:23",
+    "graph": {
+        "nodes": [
+            {
+                "id": "policy",
+                "type": "dataset",
+                "x": -520,
+                "y": -40,
+                "params": {
+                    "dataset": "14",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Policies so far: humanoid-policy"
+            },
+            {
+                "id": "learn",
+                "type": "ws-humanoid-g1",
+                "x": -140,
+                "y": -40,
+                "params": {
+                    "mode": "Learn to stand up",
+                    "accelerator": "NVIDIA GPU",
+                    "terrain": "Flat floor",
+                    "robots": 4096,
+                    "minutes": 180,
+                    "replay_every": 20,
+                    "seed": 3,
+                    "training": "Continue"
+                },
+                "title": "G1: learn to stand up",
+                "dest": {
+                    "location": 3,
+                    "name": "humanoid-policy",
+                    "folder": "humanoid-policy",
+                    "live": false,
+                    "move": false,
+                    "ports": [
+                        "policy"
+                    ]
+                }
+            },
+            {
+                "id": "tel_robot",
+                "type": "telemetry",
+                "x": 280,
+                "y": -60,
+                "params": {
+                    "interval": 0.5,
+                    "channels": "robot",
+                    "keep": 120
+                },
+                "title": "Tries for the 3D view"
+            },
+            {
+                "id": "tel_train",
+                "type": "telemetry",
+                "x": 280,
+                "y": 160,
+                "params": {
+                    "interval": 1,
+                    "channels": "train",
+                    "keep": 4000
+                },
+                "title": "Learning curve"
+            },
+            {
+                "id": "view",
+                "type": "viewer-3d",
+                "x": 1100,
+                "y": -60,
+                "params": {
+                    "quality": "high",
+                    "speed": 1,
+                    "controls": "button Finish now",
+                    "control_channel": "control"
+                },
+                "title": "A try, replayed"
+            },
+            {
+                "id": "cam_side",
+                "type": "viewer-3d",
+                "x": 760,
+                "y": -220,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: side"
+                },
+                "title": "From the side"
+            },
+            {
+                "id": "score",
+                "type": "chart",
+                "x": 760,
+                "y": 260,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "stand_score,up_pct,assist",
+                    "channel": "train",
+                    "ymin": "0",
+                    "ymax": "100",
+                    "title": "Stand-up score, tries it gets up from, help (% of its weight)"
+                },
+                "title": "Getting up"
+            },
+            {
+                "id": "time_up",
+                "type": "chart",
+                "x": 760,
+                "y": 460,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "time_to_up",
+                    "channel": "train",
+                    "ymin": "0",
+                    "title": "Time to get up (s)"
+                },
+                "title": "Time to get up"
+            },
+            {
+                "id": "reward",
+                "type": "chart",
+                "x": 1100,
+                "y": 160,
+                "params": {
+                    "kind": "line",
+                    "x": "minutes",
+                    "y": "reward",
+                    "channel": "train",
+                    "title": "Reward per try"
+                },
+                "title": "Reward"
+            },
+            {
+                "id": "numbers",
+                "type": "gauge-view",
+                "x": 760,
+                "y": 40,
+                "params": {
+                    "fields": "train.stand_score,train.up_pct,train.assist,train.time_to_up,train.steps_m,train.minutes",
+                    "style": "number",
+                    "decimals": 1
+                },
+                "title": "Learning"
+            }
+        ],
+        "edges": [
+            {
+                "id": "policy.files>learn.policy",
+                "from": {
+                    "node": "policy",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "learn",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "learn.telemetry>tel_robot.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_robot",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "learn.telemetry>tel_train.from",
+                "from": {
+                    "node": "learn",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel_train",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel_robot.stream>view.scene",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "view",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel_robot.stream>cam_side.scene",
+                "from": {
+                    "node": "tel_robot",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_side",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel_train.stream>score.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "score",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>time_up.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "time_up",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>reward.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "reward",
+                    "port": "data"
+                }
+            },
+            {
+                "id": "tel_train.stream>numbers.data",
+                "from": {
+                    "node": "tel_train",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "numbers",
+                    "port": "data"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": []
+        }
+    }
+}

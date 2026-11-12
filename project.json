@@ -26,12 +26,18 @@
             "file": "blueprints/3-circuit-test.json",
             "published_version": 5,
             "nodes": 9
+        },
+        {
+            "name": "4 · Learn to stand up",
+            "file": "blueprints/4-learn-to-stand-up.json",
+            "published_version": 0,
+            "nodes": 10
         }
     ],
     "blocks": [
         {
             "id": "ws-humanoid-g1",
-            "version": 5,
+            "version": 6,
             "name": "Humanoid G1"
         }
     ]

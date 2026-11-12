@@ -1,11 +1,11 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid G1 (ws-humanoid-g1) · version 5 · machine block, Python: def run(ctx)
+# Humanoid G1 (ws-humanoid-g1) · version 6 · machine block, Python: def run(ctx)
 # A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up on its own after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-12
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt)                Policy · several · optional · Policies (.pt): walking ones (Learn to walk) and stand-up ones (Learn to stand up). Walk drives the robot with the newest walking one and gets it up with the newest stand-up one; each training carries
+#   policy      Files (pt)                Policy · several · optional · Policies (.pt): walking ones and stand-up ones. Walk uses the newest of each; each training carries on from its own kind
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
 #   policy      Files (pt)                Policy · humanoid_walk_[circuit_]<date>_<NN>.pt (Learn to walk) or humanoid_standup_<date>_<NN>.pt (Learn to stand up): the best policy learned (network, input scaling, optimizer, ground, score)
 #   curve       Table (csv)               Learning curve · training.csv (Learn to walk) or standup.csv (Learn to stand up)
