@@ -1,22 +1,22 @@
 # Humanoid G1
 
-A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or a test course (bumps, blocks, a ramp), then walks the course live in 3D.
+A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit with rough ground, slopes, moving tiles and stairs, seeing the ground ahead
 
-A Unitree G1 humanoid (1.3 m, 35 kg, 29 joints) in MuJoCo: its links with their masses and inertias, its joints with their limits, its motors with their torque limits and position loops, its feet on the ground with friction (MuJoCo Menagerie and Playground).
+A Unitree G1 humanoid (1.3 m, 35 kg, 29 joints) in MuJoCo: links with their masses and inertias, joints with their limits, motors with torque limits and position loops, feet on the ground with friction (MuJoCo Menagerie and Playground).
 
-Ground: Flat floor, or Test course: flat to 4 m, a 4 x 4 m square of bumps (0-4 cm), a 12.5 % slope up to a 0.5 m plateau at 14-17 m and down to 21 m, a 4 x 4 m square of blocks (0.4 m tiles, 0-5 cm) at 24-28 m, flat after (one heightfield; the 3D view builds the same ground).
+Ground: Flat floor, or Circuit: a 38 x 18 m rectangle with rounded corners whose line the robot follows. Side 1: bumps (0-4 cm), a 12.5 % slope up to a 0.5 m plateau and down, blocks (0-5 cm). Side 2: 64 tiles that rise and fall each on its own rhythm by 2-8 cm. Side 3: a staircase, 10 steps up (12 cm), a landing, 10 down. Inside: a yard of practice stairs (6, 9, 12, 15 cm). One heightfield, the tiles as moving boxes; the 3D view builds the same ground.
 
-Learn to walk: a policy (a neural network that, 50 times a second, turns what the robot senses into targets for its 29 joints: speed and turn rates, which way is down, joint angles and speeds, the speed asked, the beat of its steps; it does not see the ground) learns by trial and error (PPO) to walk at the speed asked along a line, and to turn when asked. 4096 robots on an NVIDIA GPU with MuJoCo Warp, up to 512 on the CPU (to try, not to learn). Pushes, odd starting poses and sensor noise make it robust; on the course robots start anywhere along it, walking either way. It carries on from the best policy wired in that learned on the same ground (else the best one, its critic first learning the new ground), unless Start from scratch. One episode is replayed in 3D every few seconds (channel robot); numbers go to channel train (walk_score, fell, speed_err, episode_s, distance). Finish now (control channel) stops and keeps the best policy: humanoid_walk_[course_]<date>_<NN>.pt.
+Learn to walk: a policy (a neural network that, 50 times a second, turns what the robot senses, its speed and turn rates, which way is down, joint angles and speeds, the speed asked, the beat of its steps, and an elevation map of the ground from 0.3 m behind to 1.5 m ahead, as its head depth camera gives it, into targets for its 29 joints) learns by trial and error (PPO) to walk at the speed asked along its line. 4096 robots on an NVIDIA GPU with MuJoCo Warp, up to 512 on the CPU (to try, not to learn). Pushes, odd starts and sensor noise make it robust. It carries on from the best policy wired in that learned on the same ground (else the best one; a blind one gets the elevation map, its new inputs starting at zero, and the critic learns first). One episode is replayed in 3D every few seconds (channel robot); numbers go to channel train. Finish now (control channel) stops and keeps the best: humanoid_walk_[circuit_]<date>_<NN>.pt.
 
-Walk: the newest policy wired in (or Policy file) walks the robot live, in real time (esasim.humanoid/1). On the course it turns back at each end (Laps). From the view's bar: speed, heading, Push (0.8 m/s from the side), Reset (back to the start line). After a fall it gets up where it fell, 3 s later. Events (channel event): each part of the course, falls, laps. Frames carry its pose, the command, the IMU (gyro, accelerometer), foot contacts and loads, the ground under it and every motor's torque, for the view's head camera (humanoid: eyes, depth) and telemetry window (humanoid: telemetry).
+Walk: the newest policy wired in (or Policy file) walks the robot live round the circuit (esasim.humanoid/1), lap after lap; heading beyond 90° walks it the other way round. From the view's bar: speed, heading, Push, Reset (back to the start line). After a fall it gets up on its line, 3 s later. Events (channel event): each part, falls, laps. Frames carry its pose, command, IMU, foot loads, the ground under it, motor torques and the tiles' clock.
 
-Packages: torch, mujoco, and for the GPU mujoco-warp and warp-lang. About 100-165 million steps for a good walk: about an hour on an RTX 3070.
+Packages: torch, mujoco, and for the GPU mujoco-warp and warp-lang.
 
 An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Python (`backend.py`, `def run(ctx)`).
 
 | | |
 |---|---|
-| Block | `ws-humanoid-g1` · version 2 |
+| Block | `ws-humanoid-g1` · version 3 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any machine, NVIDIA GPU |
@@ -31,7 +31,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 
 | Port | Type | Description |
 |---|---|---|
-| `policy` Policy | Files (pt) | Learn to walk: humanoid_walk_[course_]<date>_<NN>.pt, the best policy learned (network, input scaling, ground, walk score) |
+| `policy` Policy | Files (pt) | Learn to walk: humanoid_walk_[circuit_]<date>_<NN>.pt, the best policy learned (network, input scaling, ground, walk score) |
 | `curve` Learning curve | Table (csv) | Learn to walk: training.csv |
 
 ## Settings
@@ -40,7 +40,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 |---|---|---|---|
 | `mode` What to do | select | `"Learn to walk"` |  |
 | `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU |
-| `terrain` Ground | select | `"Flat floor"` | Test course: bumps, a slope up, a plateau, a slope down, blocks |
+| `terrain` Ground | select | `"Flat floor"` | Circuit: rough ground, slopes, moving tiles and stairs round a rectangle, and a yard of practice stairs |
 | `robots` Robots learning at once | number | `4096` | Learn to walk; at most 512 on the CPU |
 | `minutes` Minutes | number | `90` | How long it learns (Learn to walk) or walks (Walk) |
 | `max_speed` Top speed asked (m/s) | number | `1` |  |
@@ -49,8 +49,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 | `seed` Seed | number | `1` |  |
 | `from_scratch` Start from scratch | bool | `false` | Ignore a policy wired in |
 | `speed` Walking speed (m/s) | number | `0.6` | Walk: the speed it starts at (the view's slider changes it) |
-| `heading` Heading (degrees) | number | `0` | Walk |
-| `laps` Laps | bool | `true` | Walk on the course: turn back at each end |
+| `heading` Heading (degrees) | number | `0` | Walk: on the circuit, beyond ±90° it goes round the other way (clockwise); on the flat floor, the way it walks |
 | `policy_file` Policy file | text | `""` | Walk: the name of the .pt to use among those wired in (empty: the newest) |
 
 ## Use it in EsaSim

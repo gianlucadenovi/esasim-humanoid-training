@@ -18,20 +18,20 @@
         {
             "name": "2 · Walk the course",
             "file": "blueprints/2-walk-the-course.json",
-            "published_version": 2,
+            "published_version": 3,
             "nodes": 9
         },
         {
             "name": "3 · Learn the course",
             "file": "blueprints/3-learn-the-course.json",
-            "published_version": 0,
+            "published_version": 1,
             "nodes": 11
         }
     ],
     "blocks": [
         {
             "id": "ws-humanoid-g1",
-            "version": 2,
+            "version": 3,
             "name": "Humanoid G1"
         }
     ]
