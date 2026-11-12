@@ -3,10 +3,10 @@
         "kind": "blueprint",
         "flow_id": 43
     },
-    "name": "2 · Walk the course",
+    "name": "2 · Walk the circuit",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
-    "published_version": 3,
-    "updated": "2026-11-12 14:43:28",
+    "published_version": 4,
+    "updated": "2026-11-12 15:15:20",
     "graph": {
         "nodes": [
             {
@@ -29,14 +29,13 @@
                 "params": {
                     "mode": "Walk",
                     "accelerator": "CPU",
-                    "terrain": "Test course",
+                    "terrain": "Circuit",
                     "minutes": 30,
                     "speed": 0.6,
                     "heading": 0,
-                    "laps": true,
                     "policy_file": ""
                 },
-                "title": "G1: walk the course"
+                "title": "G1: walk the circuit"
             },
             {
                 "id": "tel",
@@ -62,7 +61,7 @@
                     "control_channel": "control",
                     "camera": "free"
                 },
-                "title": "The G1 on the course (director)"
+                "title": "The G1 on the circuit (director)"
             },
             {
                 "id": "cam_eyes",

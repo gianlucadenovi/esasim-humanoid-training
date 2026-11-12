@@ -3,10 +3,10 @@
         "kind": "blueprint",
         "flow_id": 50
     },
-    "name": "3 · Learn the course",
+    "name": "3 · Learn the circuit",
     "description": "Carries on from the best flat-floor policy on the test course (bumps, a slope up and down, blocks), thousands of robots at once on the GPU; the policy goes back to the humanoid-policy dataset for flow 2 to walk with.",
     "published_version": 1,
-    "updated": "2026-11-12 14:28:42",
+    "updated": "2026-11-12 15:15:29",
     "graph": {
         "nodes": [
             {
@@ -29,16 +29,16 @@
                 "params": {
                     "mode": "Learn to walk",
                     "accelerator": "NVIDIA GPU",
-                    "terrain": "Test course",
+                    "terrain": "Circuit",
                     "robots": 4096,
-                    "minutes": 60,
+                    "minutes": 120,
                     "max_speed": 1,
                     "push": 1.5,
                     "replay_every": 20,
                     "seed": 2,
                     "from_scratch": false
                 },
-                "title": "G1: learn the course",
+                "title": "G1: learn the circuit",
                 "dest": {
                     "location": 3,
                     "name": "humanoid-policy",
@@ -85,7 +85,7 @@
                     "controls": "button Finish now",
                     "control_channel": "control"
                 },
-                "title": "An episode on the course, replayed"
+                "title": "An episode on the circuit, replayed"
             },
             {
                 "id": "cam_side",
@@ -120,7 +120,7 @@
                     "channel": "train",
                     "ymin": "0",
                     "ymax": "100",
-                    "title": "Walk score and falls on the course (%)"
+                    "title": "Walk score and falls on the circuit (%)"
                 },
                 "title": "Walk score"
             },

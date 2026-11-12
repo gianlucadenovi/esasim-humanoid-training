@@ -16,14 +16,14 @@
             "nodes": 9
         },
         {
-            "name": "2 · Walk the course",
-            "file": "blueprints/2-walk-the-course.json",
-            "published_version": 3,
+            "name": "2 · Walk the circuit",
+            "file": "blueprints/2-walk-the-circuit.json",
+            "published_version": 4,
             "nodes": 9
         },
         {
-            "name": "3 · Learn the course",
-            "file": "blueprints/3-learn-the-course.json",
+            "name": "3 · Learn the circuit",
+            "file": "blueprints/3-learn-the-circuit.json",
             "published_version": 1,
             "nodes": 11
         }
