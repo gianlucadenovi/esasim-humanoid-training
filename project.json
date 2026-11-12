@@ -31,7 +31,7 @@
     "blocks": [
         {
             "id": "ws-humanoid-g1",
-            "version": 3,
+            "version": 4,
             "name": "Humanoid G1"
         }
     ]

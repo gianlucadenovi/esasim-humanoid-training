@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid G1 (ws-humanoid-g1) · version 3 · machine block, Python: def run(ctx)
+# Humanoid G1 (ws-humanoid-g1) · version 4 · machine block, Python: def run(ctx)
 # A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit with rough ground, slopes, moving tiles and stairs, seeing the ground ahead
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-12
@@ -1261,6 +1261,13 @@ def learn_run(ctx):
         if int(st.get("obs_dim") or 0) < OBS_DIM:
             ctx.log("It learned blind: it now gets an elevation map of the ground ahead (from its head camera), which it learns to use.")
         ctx.log("Continuing from %s (walk score %.0f%% on %s, %.0f million steps of experience)." % (f.name, float(st.get("score") or 0), GROUND_NAME.get(st.get("terrain") or "flat", "?"), steps_done / 1e6))
+    # The run's time limit (Stop after): learning ends a few minutes before it, so the policy is written and kept
+    # rather than lost when the worker stops the block.
+    left = ctx.time_left() if hasattr(ctx, "time_left") else None
+    if left is not None and left / 60.0 - 3.0 < minutes:
+        cut = max(1.0, left / 60.0 - 3.0)
+        ctx.log("The run stops after %.0f minutes (Stop after): learning ends at %.0f minutes instead of %.0f, so the policy is kept. Raise Stop after to learn longer." % (ctx.max_minutes, cut, minutes))
+        minutes = cut
     ctx.log("Learning to walk on %s, on %s: %d robots at once, for up to %.0f minutes." % (GROUND_NAME[terrain], label, n, minutes))
     env.reset_all()
     a_obs, a_priv = env.obs()
