@@ -12,7 +12,7 @@
         {
             "name": "1 · Learn to walk",
             "file": "blueprints/1-learn-to-walk.json",
-            "published_version": 2,
+            "published_version": 3,
             "nodes": 9
         },
         {
@@ -24,7 +24,7 @@
         {
             "name": "3 · Learn the circuit",
             "file": "blueprints/3-learn-the-circuit.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 11
         }
     ],
