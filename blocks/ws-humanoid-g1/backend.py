@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid (ws-humanoid-g1) · version 8 · machine block, Python: def run(ctx)
+# Humanoid (ws-humanoid-g1) · version 9 · machine block, Python: def run(ctx)
 # A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on a GPU, on a flat floor or round a circuit, and to get up after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-13
@@ -240,7 +240,8 @@ N_SUB = int(round(CTRL_DT / SIM_DT))
 #     plateau at 14-17 m and down to 21 m · a 4 x 4 m square of blocks (0.4 m tiles, 0-5 cm) at 24-28 m
 #   side 3 (y = 18, walked toward -x): a staircase 3 m wide, 10 steps up (12 cm, 30 cm deep) from x = 22, a 2 m
 #     landing 1.2 m up, 10 steps down
-#   sides 2 and 4: flat
+#   side 2 (x = 34): a 4 x 4 m square of 64 moving tiles · side 4 (x = -4, walked toward -y): a 4 x 4 m square of
+#     smooth ice (friction 0.08, its top 6 mm up: a heightfield of its own that only the feet touch) at y = 7-11
 # Inside it, a training yard: four staircases of 10 steps up and 10 down, with 6, 9, 12 and 15 cm risers.
 # The same few numbers go to the 3D view, which builds the same ground from them. In MuJoCo: one heightfield, 5 cm a
 # point (the stairs' edges on its points).
@@ -295,7 +296,8 @@ def make_course():
     Q, head, curv, L = make_path()
     k4 = max(1, int(round(0.25 / 0.1)))
     tiles = {"x0": 32.0, "y0": 7.0, "cell": 0.5, "n": 8, "half": 0.15, "amp": [0.01, 0.04], "base": [0.0, 0.03], "period": [1.5, 4.0]}
-    return {"ramp": {"x": [10.0, 14.0, 17.0, 21.0], "h": 0.5, "half": 3.0, "bank": 1.5},
+    return {"ice": {"x0": -6.0, "y0": 7.0, "size": 4.0, "top": 0.006, "mu": 0.08},
+            "ramp": {"x": [10.0, 14.0, 17.0, 21.0], "h": 0.5, "half": 3.0, "bank": 1.5},
             "patches": [{"kind": "bumps", "x0": 4.0, "y0": -2.0, "size": 4.0, "cell": 0.1, "n": 41, "mm": bumps.ravel().tolist()},
                         {"kind": "blocks", "x0": 24.0, "y0": -2.0, "size": 4.0, "cell": 0.4, "n": 10, "mm": blocks.ravel().tolist()}],
             "stairs": stairs, "tiles": tiles, "circuit": dict(CIRCUIT, length=round(L, 2)),
@@ -366,9 +368,24 @@ def tiles_xml(t=None):
     return "".join(out)
 
 
+def ice_xml(xml, terrain, c=None):
+    """the ice: a flat heightfield a few millimetres up that only the feet touch (contact pairs of their own, with the
+    ice's low friction), the same kind of contact as the course's ground; on the flat floor, none"""
+    c = c or COURSE.get("ice")
+    if terrain != "circuit" or not c:
+        return xml
+    half = c["size"] / 2
+    n = int(round(c["size"] / 0.1)) + 1           # (a point every 10 cm: small cells make good contacts)
+    xml = xml.replace("</asset>", '<hfield name="ice" nrow="%d" ncol="%d" size="%.3f %.3f %.4f 0.01" /></asset>' % (n, n, half, half, c["top"]), 1)   # (its heights: set by load_model)
+    xml = xml.replace("</worldbody>", '<geom name="ice" type="hfield" hfield="ice" pos="%.3f %.3f 0" contype="0" conaffinity="0" group="1" /></worldbody>'
+                      % (c["x0"] + half, c["y0"] + half), 1)
+    pairs = "".join('<pair name="%s_ice" geom1="%s" geom2="ice" condim="3" friction="%.3f %.3f" />' % (f, f, c["mu"], c["mu"]) for f in ("left_foot", "right_foot"))
+    return xml.replace("</contact>", pairs + "</contact>", 1)
+
+
 def load_model(mujoco, terrain="circuit"):
     import numpy as np
-    m = mujoco.MjModel.from_xml_string((MODEL_IN_USE or MODEL_XML).replace("</worldbody>", tiles_xml() + "</worldbody>"))
+    m = mujoco.MjModel.from_xml_string(ice_xml((MODEL_IN_USE or MODEL_XML).replace("</worldbody>", tiles_xml() + "</worldbody>"), terrain))
     m.opt.timestep = SIM_DT
     H = ground_grid(terrain)
     hid = m.hfield("terrain").id
@@ -376,6 +393,10 @@ def load_model(mujoco, terrain="circuit"):
     top = float(m.hfield_size[hid][2])
     a = int(m.hfield_adr[hid])
     m.hfield_data[a:a + H.size] = np.clip((H + HF_BASE) / top, 0.0, 1.0).ravel().astype(np.float32)
+    if terrain == "circuit" and COURSE.get("ice"):     # the ice: level, at its full height
+        ih = m.hfield("ice").id
+        ia = int(m.hfield_adr[ih])
+        m.hfield_data[ia:ia + int(m.hfield_nrow[ih]) * int(m.hfield_ncol[ih])] = 1.0
     if terrain != "circuit":            # the flat floor only: the course's heightfield out of the way (fewer contacts)
         m.geom_pos[m.geom("terrain").id][2] = -5.0
     return m
@@ -497,6 +518,7 @@ class CpuSim:
         self.tq = torch.zeros(n, mjm.nu)
         self.tile_z = None
         self.lift = None             # (body, forces) an upward help on one body
+        self.pushes = {}             # robot: [body, point in the body's frame, force (N, world), substeps left] (a push by hand)
         self.qpos = torch.zeros(n, mjm.nq)
         self.qvel = torch.zeros(n, mjm.nv)
         self.ctrl = torch.zeros(n, mjm.nu)
@@ -515,8 +537,25 @@ class CpuSim:
                 d.mocap_pos[:, 2] = tz[i]
             if lift is not None:
                 d.xfrc_applied[lift[0], 2] = lift[1][i]
-            for _ in range(N_SUB):
-                mj.mj_step(m, d)
+            pu = self.pushes.get(i)
+            if pu is None:
+                for _ in range(N_SUB):
+                    mj.mj_step(m, d)
+            else:                     # a push: the force at the point pushed (it moves with the body), its turning effect about the body's centre
+                b, loc, F = pu[0], pu[1], pu[2]
+                for _ in range(N_SUB):
+                    if pu[3] > 0:
+                        pw = d.xpos[b] + d.xmat[b].reshape(3, 3) @ loc
+                        d.xfrc_applied[b, :3] = F
+                        d.xfrc_applied[b, 3:] = self.np.cross(pw - d.xipos[b], F)
+                        pu[3] -= 1
+                    elif pu[3] == 0:
+                        d.xfrc_applied[b, :] = 0.0
+                        pu[3] = -1
+                    mj.mj_step(m, d)
+                if pu[3] < 0:
+                    d.xfrc_applied[b, :] = 0.0
+                    self.pushes.pop(i, None)
             self.qpos_np[i] = d.qpos
             self.qvel_np[i] = d.qvel
             self.sens_np[i] = d.sensordata
@@ -551,6 +590,10 @@ class CpuSim:
 
     def refresh(self):
         pass
+
+    def push_at(self, i, body, local, force, seconds=0.1):
+        """push robot i by hand: force (N, world) at a point of a body (in its frame), for a moment"""
+        self.pushes[i] = [int(body), self.np.asarray(local, dtype=float), self.np.asarray(force, dtype=float), max(1, int(round(seconds / SIM_DT)))]
 
     def kick(self, dv):
         d_ = dv.double().numpy()
@@ -701,6 +744,20 @@ class WalkEnv:
         # the ground (the same heights as the heightfield the physics uses), to measure heights from it
         self.terrain = terrain
         self.Hg = torch.tensor(ground_grid(terrain), device=dev, dtype=torch.float32)
+        self.ice = COURSE.get("ice") if terrain == "circuit" else None     # (the ice: its top in the heights, not in the physics' heightfield)
+        if self.ice:
+            c_ = self.ice
+            i0, i1 = int(round((c_["x0"] - HF_X0) / HF_RES)), int(round((c_["x0"] + c_["size"] - HF_X0) / HF_RES))
+            j0, j1 = int(round((c_["y0"] - HF_Y0) / HF_RES)), int(round((c_["y0"] + c_["size"] - HF_Y0) / HF_RES))
+            self.Hg[j0:j1 + 1, i0:i1 + 1] = torch.clamp(self.Hg[j0:j1 + 1, i0:i1 + 1], min=float(c_["top"]))
+        # how high the ankle sites stand over the soles (the G1: 3.7 cm): foot heights are measured from those sites
+        import mujoco as _mj
+        d1 = _mj.MjData(mjm)
+        _mj.mj_resetDataKeyframe(mjm, d1, mjm.key("home").id)
+        _mj.mj_forward(mjm, d1)
+        gid = mjm.geom("left_foot").id
+        self.sole = float(d1.site_xpos[mjm.site("left_foot").id][2] - (d1.geom_xpos[gid][2] - mjm.geom_size[gid][2]))
+        self.sole_off = self.sole - 0.037
         # the circuit's line (robots on it follow it, either way round) and the elevation map's points
         Q, head, curv, L = PATH
         self.P, self.PH, self.PK = torch.tensor(Q, **f), torch.tensor(head, **f), torch.tensor(curv, **f)
@@ -787,7 +844,14 @@ class WalkEnv:
             lp, rp = self.S("left_foot_pos"), self.S("right_foot_pos")
             inl = (lp[:, 0] >= T["x0"]) & (lp[:, 0] < T["x0"] + S) & (lp[:, 1] >= T["y0"]) & (lp[:, 1] < T["y0"] + S)
             inr = (rp[:, 0] >= T["x0"]) & (rp[:, 0] < T["x0"] + S) & (rp[:, 1] >= T["y0"]) & (rp[:, 1] < T["y0"] + S)
-            l, r = l | (inl & (fh[:, 0] < 0.049)), r | (inr & (fh[:, 1] < 0.049))
+            l, r = l | (inl & (fh[:, 0] < self.sole + 0.015)), r | (inr & (fh[:, 1] < self.sole + 0.015))
+        if self.ice:            # on the ice: the same
+            c_ = self.ice
+            fh = self.feet_height()
+            lp, rp = self.S("left_foot_pos"), self.S("right_foot_pos")
+            onl = (lp[:, 0] >= c_["x0"]) & (lp[:, 0] < c_["x0"] + c_["size"]) & (lp[:, 1] >= c_["y0"]) & (lp[:, 1] < c_["y0"] + c_["size"])
+            onr = (rp[:, 0] >= c_["x0"]) & (rp[:, 0] < c_["x0"] + c_["size"]) & (rp[:, 1] >= c_["y0"]) & (rp[:, 1] < c_["y0"] + c_["size"])
+            l, r = l | (onl & (fh[:, 0] < self.sole + 0.015)), r | (onr & (fh[:, 1] < self.sole + 0.015))
         return torch.stack([l, r], -1)
 
     def feet_height(self):
@@ -918,8 +982,9 @@ class WalkEnv:
         self.sample_cmd(idx)
 
     def spawn_circuit(self, idx, qpos):
-        """where robots idx start in training on the circuit: 25 % anywhere on its line, 20 % near its stairs, 12 % near the
-        moving tiles, 8 % on side 1's rough ground and slopes, 35 % on a yard staircase; on the circuit either way round"""
+        """where robots idx start in training on the circuit: 25 % anywhere on its line, 20 % near its stairs, 8 % near the
+        moving tiles, 6 % near the ice, 6 % on side 1's rough ground and slopes, 35 % on a yard staircase; on the circuit
+        either way round"""
         import torch
         k = idx.numel()
         u = torch.rand(k, device=self.dev, generator=self.g)
@@ -934,7 +999,10 @@ class WalkEnv:
         tl = self.tiles
         i_tl = (self.nearest_index(torch.tensor([tl["x0"] + tl["cell"] * tl["n"] / 2], device=self.dev), torch.tensor([tl["y0"] + tl["cell"] * tl["n"] / 2], device=self.dev))
                 + (self.U(k, -1.0, 1.0) * 50).long()) % M                # within 5 m of the moving tiles' centre
-        pi = torch.where(u < 0.25, i_any, torch.where(u < 0.45, i_st, torch.where(u < 0.57, i_tl, i_s1)))
+        ic = COURSE.get("ice") or {"x0": -6.0, "y0": 7.0, "size": 4.0}
+        i_ic = (self.nearest_index(torch.tensor([ic["x0"] + ic["size"] / 2], device=self.dev), torch.tensor([ic["y0"] + ic["size"] / 2], device=self.dev))
+                + (self.U(k, -1.0, 1.0) * 40).long()) % M                # within 4 m of the ice's centre
+        pi = torch.where(u < 0.25, i_any, torch.where(u < 0.45, i_st, torch.where(u < 0.53, i_tl, torch.where(u < 0.59, i_ic, i_s1))))
         dirn = torch.where(torch.rand(k, device=self.dev, generator=self.g) < 0.5, 1.0, -1.0)
         side = self.U(k, -0.3, 0.3)
         hx, hy = torch.cos(self.PH[pi]), torch.sin(self.PH[pi])
@@ -1056,7 +1124,7 @@ class WalkEnv:
         r["feet_slip"] = (body_v.unsqueeze(-1) * contact).sum(-1)
         rz = rz_bezier(self.phase, 0.15)
         moving = (self.S("global_linvel_pelvis")[:, :2].norm(dim=-1) > 0.1) | (self.S("global_angvel_pelvis")[:, 2].abs() > 0.1) | (cmd.norm(dim=-1) > 0.01)
-        r["feet_phase"] = torch.exp(-((feet_z - rz) ** 2).sum(-1) / 0.01) * moving
+        r["feet_phase"] = torch.exp(-((feet_z - self.sole_off - rz) ** 2).sum(-1) / 0.01) * moving     # (heights for the G1's ankles)
         still = cmd.norm(dim=-1) < 0.01
         r["stand_still"] = (jq - self.default).abs().sum(-1) * still
         r["termination"] = fell.float()
@@ -1498,6 +1566,10 @@ def make_zones(c=COURSE):
         z.append(("stairs_a", min(xs[0], xs[1]), max(xs[0], xs[1]), y0, y1, "stairs", txt))
         z.append(("landing", min(xs[1], xs[2]), max(xs[1], xs[2]), y0, y1, "flat", "On the landing, %.1f m up" % (st["n"] * st["rise"])))
         z.append(("stairs_b", min(xs[2], xs[3]), max(xs[2], xs[3]), y0, y1, "stairs", txt))
+    ic = c.get("ice")
+    if ic:
+        z.append(("ice", ic["x0"], ic["x0"] + ic["size"], ic["y0"], ic["y0"] + ic["size"], "ice",
+                  "Ice: smooth, almost no grip (friction %.2f)" % ic["mu"]))
     tl = c.get("tiles")
     if tl:
         S = tl["cell"] * tl["n"]
@@ -2082,6 +2154,31 @@ def walk_run(ctx):
         env.mode_line[:] = True
     zone, lap, lap_t0, falls_lap, s_last = None, 1, 0.0, 0, 0
     hold = 1.5        # s standing still before it sets off
+    push_v = 0.8      # a push by hand: as much as a shove of 0.8 m/s to the whole body (Push strength changes it)
+    mass = float(mjm.body_subtreemass[mjm.body("pelvis").id])
+
+    def push_by_hand(v, dv):
+        """a push on the part of the body clicked in the view: {body, at: the point in that body's frame, dir: the way (world)};
+        a force for 0.1 s that gives the whole robot dv m/s, at that point (so it also turns it); what to say, or None"""
+        if not isinstance(v, dict) or not v.get("body"):
+            return None
+        try:
+            b = mjm.body(str(v["body"])).id
+            loc = [float(x) for x in (v.get("at") or [0, 0, 0])][:3]
+            dx, dy, dz = [float(x) for x in (v.get("dir") or [1, 0, 0])][:3]
+        except (KeyError, TypeError, ValueError):
+            return None
+        n_ = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+        dx, dy, dz = dx / n_, dy / n_, dz / n_
+        F = mass * dv / 0.1
+        sim.push_at(0, b, loc, [F * dx, F * dy, F * dz], 0.1)
+        q = sim.qpos[0]
+        yaw = math.atan2(2 * (float(q[3]) * float(q[6]) + float(q[4]) * float(q[5])), 1 - 2 * (float(q[5]) ** 2 + float(q[6]) ** 2))
+        fwd, left = dx * math.cos(yaw) + dy * math.sin(yaw), -dx * math.sin(yaw) + dy * math.cos(yaw)
+        frm = ("behind" if fwd > 0 else "the front") if abs(fwd) >= abs(left) else ("the right" if left > 0 else "the left")
+        part = re.sub(r"_(link|col)$", "", str(v["body"]))
+        part = re.sub(r"^(l|left)_", "left ", re.sub(r"^(r|right)_", "right ", part)).replace("_", " ")
+        return "A push on its %s, from %s (%.1f m/s)" % ({"pelvis": "pelvis", "torso": "torso"}.get(part, part), frm, dv)
     ctx.telemetry(ch_ev, {"text": ("The %s is on the circuit (%s): it sets off at %.1f m/s" % (R["short"], "counterclockwise" if dirn > 0 else "clockwise", speed)) if circuit
                           else "The %s is on the floor: it sets off at %.1f m/s" % (R["short"], speed)})
     o, _ = env.obs(noisy=False)
@@ -2111,11 +2208,20 @@ def walk_run(ctx):
                 else:
                     set_line(heading)
                     ctx.telemetry(ch_ev, {"text": "New heading: %.0f°" % math.degrees(heading)})
+            elif c in ("push strength", "push_strength", "push speed"):
+                try:
+                    push_v = max(0.1, min(3.0, float(v)))
+                except (TypeError, ValueError):
+                    pass
             elif c == "push":
-                ang = env.U(1, 0.0, 2 * math.pi)
-                sim.kick(torch.stack([torch.cos(ang), torch.sin(ang)], -1) * 0.8)
-                wh = float(env.path_heading()[0])
-                ctx.telemetry(ch_ev, {"text": "A push (0.8 m/s, from the %s)" % ("left" if math.sin(float(ang) - wh) > 0 else "right")})
+                hand = push_by_hand(v, push_v)
+                if hand:
+                    ctx.telemetry(ch_ev, {"text": hand})
+                else:            # (a plain Push: a shove of the whole body, from a random side)
+                    ang = env.U(1, 0.0, 2 * math.pi)
+                    sim.kick(torch.stack([torch.cos(ang), torch.sin(ang)], -1) * push_v)
+                    wh = float(env.path_heading()[0])
+                    ctx.telemetry(ch_ev, {"text": "A push (%.1f m/s, from the %s)" % (push_v, "left" if math.sin(float(ang) - wh) > 0 else "right")})
             elif c in ("reset", "stand up", "restart", "back to the start"):
                 getting_up, fell_at = False, None
                 start()

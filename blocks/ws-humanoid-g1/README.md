@@ -4,13 +4,13 @@ A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in 
 
 A humanoid robot in MuJoCo (models from MuJoCo Menagerie): Robot sets which. Unitree G1 (the default; 1.3 m, 35 kg, 29 joints), Unitree H1 (1.8 m, 51 kg, 19 joints) or Apptronik Apollo (1.7 m, 81 kg, 32 joints). Each robot has its own policies: their file names say which (humanoid_walk_… is the G1's, humanoid_h1_walk_…, humanoid_apollo_standup_…), a run uses only the chosen robot's and leaves the others as they are, so switching robot loses nothing.
 
-Ground: Flat floor, or Circuit: a 38 x 18 m rectangle whose line the robot follows: bumps, a slope to a 0.5 m plateau, blocks, 64 moving tiles, 10 steps up and 10 down, and a yard of practice stairs.
+Ground: Flat floor, or Circuit: a 38 x 18 m rectangle whose line the robot follows: bumps, a slope to a 0.5 m plateau, blocks, 64 moving tiles, 10 steps up and 10 down, a square of smooth ice (friction 0.08), and a yard of practice stairs.
 
 Learn to walk: a policy (a neural network that, 50 times a second, turns what the robot senses, its speed and turn rates, which way is down, joint angles and speeds, the speed asked, the beat of its steps, and an elevation map of the ground ahead as its head depth camera gives it, into targets for its joints) learns by trial and error (PPO) to walk at the speed asked along its line. 4096 robots on an NVIDIA GPU with MuJoCo Warp, up to 512 on the CPU (to try, not to learn). Pushes, odd starts and sensor noise make it robust. Training: Continue carries on from this robot's policy with the most experience, among those wired in and the checkpoints stopped runs left on this machine, with its optimizer's state; Start over learns from nothing. It ends three minutes before the run's Stop after, so the policy is always written. An episode is replayed in 3D every few seconds (channel robot); numbers go to channel train. Finish now (control channel) stops and keeps the best.
 
 Learn to stand up: each try starts with the robot lying on the flat floor where a fall left it, with 10 s to get up and stay up. At first an upward pull on its torso of 80 % of its weight makes it possible; each time it gets up in more than 60 % of tries the help goes down by 5 %, to none. Stand-up score: the share of tries it gets up from, times how little help it still needs. Several hours on a GPU.
 
-Walk: the robot's newest policy wired in (or Policy file) walks it live round the circuit (esasim.humanoid/1), lap after lap; heading beyond 90° walks it the other way. From the view's bar: speed, heading, Push, Reset. After a fall, with a stand-up policy of this robot wired in, it gets up on its own (put back on its feet if still down after 10 s); without one, it is set on its feet 3 s later. Events (channel event): falls, laps.
+Walk: the robot's newest policy wired in (or Policy file) walks it live round the circuit (esasim.humanoid/1), lap after lap; heading beyond 90° walks it the other way. From the view's bar: speed, heading, Reset, and Push: a hand that pushes the part of the robot clicked, the way the camera looks (Push strength: as a shove of that many m/s to the whole robot). After a fall, with a stand-up policy of this robot wired in, it gets up on its own (put back on its feet if still down after 10 s); without one, it is set on its feet 3 s later. Events (channel event): falls, laps.
 
 The G1's rewards and settings were tuned by learning; the H1's and the Apollo's use the same task scaled to their height and weight, and may need longer or some tuning to walk as well.
 
@@ -20,7 +20,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 
 | | |
 |---|---|
-| Block | `ws-humanoid-g1` · version 8 |
+| Block | `ws-humanoid-g1` · version 9 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any machine, NVIDIA GPU |
@@ -45,7 +45,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 | `mode` What to do | select | `"Learn to walk"` | Learn to walk: walking along its line at the speed asked. Learn to stand up: getting up from the floor after a fall (flat floor). Walk: live, with the newest policies |
 | `robot` Robot | select | `"Unitree G1"` | G1: 1.3 m, 35 kg, 29 joints. H1: 1.8 m, 51 kg, 19 joints. Apollo: 1.7 m, 81 kg, 32 joints. Each learns and walks with its own policies only |
 | `accelerator` Run on | select | `"auto"` | auto: the NVIDIA GPU when there is one (MuJoCo Warp), else the CPU |
-| `terrain` Ground | select | `"Flat floor"` | Circuit: rough ground, slopes, moving tiles and stairs round a rectangle, and a yard of practice stairs (Learn to stand up always uses the flat floor) |
+| `terrain` Ground | select | `"Flat floor"` | Circuit: rough ground, slopes, moving tiles, ice and stairs round a rectangle, and a yard of practice stairs (Learn to stand up always uses the flat floor) |
 | `robots` Robots learning at once | number | `4096` | Learn to walk, Learn to stand up; at most 512 on the CPU |
 | `minutes` Minutes | number | `90` | How long it learns or walks; it stops 3 minutes before the run's Stop after so the policy is kept |
 | `max_speed` Top speed asked (m/s) | number | `1` |  |
