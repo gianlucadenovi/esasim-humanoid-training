@@ -30,7 +30,7 @@
         {
             "name": "4 · Test the circuit",
             "file": "blueprints/4-test-the-circuit.json",
-            "published_version": 7,
+            "published_version": 8,
             "nodes": 9
         },
         {
