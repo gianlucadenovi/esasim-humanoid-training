@@ -5,8 +5,8 @@
     },
     "name": "5 · Playground",
     "description": "Drive the robot by hand (drive pad or keyboard) over sand, water, gravel, stepping stones, curbs, ice and steps, with its newest policies; push it to test its balance.",
-    "published_version": 1,
-    "updated": "2026-11-13 18:58:51",
+    "published_version": 2,
+    "updated": "2026-11-13 19:12:49",
     "graph": {
         "nodes": [
             {
@@ -45,11 +45,11 @@
                 "x": 380,
                 "y": 200,
                 "params": {
-                    "interval": 0.5,
+                    "interval": 0.2,
                     "channels": "robot,event",
-                    "keep": 400
+                    "keep": 600
                 },
-                "title": "The walk"
+                "title": "The walk (read 5 times a second, for driving)"
             },
             {
                 "id": "main",
@@ -172,24 +172,24 @@
                 "main": {
                     "x": 0,
                     "y": 0,
-                    "w": 12,
+                    "w": 6,
                     "h": 12
                 },
                 "cam_eyes": {
-                    "x": 0,
-                    "y": 12,
-                    "w": 12,
+                    "x": 6,
+                    "y": 0,
+                    "w": 3,
                     "h": 12
                 },
                 "cam_follow": {
-                    "x": 0,
-                    "y": 24,
-                    "w": 12,
+                    "x": 9,
+                    "y": 0,
+                    "w": 3,
                     "h": 12
                 },
                 "telemetry": {
                     "x": 0,
-                    "y": 36,
+                    "y": 12,
                     "w": 12,
                     "h": 12
                 }
