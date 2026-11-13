@@ -1,6 +1,6 @@
 # Humanoid
 
-A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up o
+A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on a GPU, on a flat floor or round a circuit, and to get up after a fall
 
 A humanoid robot in MuJoCo (models from MuJoCo Menagerie): Robot sets which. Unitree G1 (the default; 1.3 m, 35 kg, 29 joints), Unitree H1 (1.8 m, 51 kg, 19 joints) or Apptronik Apollo (1.7 m, 81 kg, 32 joints). Each robot has its own policies: their file names say which (humanoid_walk_… is the G1's, humanoid_h1_walk_…, humanoid_apollo_standup_…), a run uses only the chosen robot's and leaves the others as they are, so switching robot loses nothing.
 
@@ -20,7 +20,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 
 | | |
 |---|---|
-| Block | `ws-humanoid-g1` · version 7 |
+| Block | `ws-humanoid-g1` · version 8 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any machine, NVIDIA GPU |

@@ -1,6 +1,6 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid (ws-humanoid-g1) · version 7 · machine block, Python: def run(ctx)
-# A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up o
+# Humanoid (ws-humanoid-g1) · version 8 · machine block, Python: def run(ctx)
+# A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on a GPU, on a flat floor or round a circuit, and to get up after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-13
 #
