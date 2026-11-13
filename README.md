@@ -171,6 +171,6 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 ### Workspace blocks it uses
 
-- [Humanoid](blocks/ws-humanoid-g1) · version 10
+- [Humanoid](blocks/ws-humanoid-g1) · version 11
 
 Keys pasted in blocks (secret settings) are not saved here. Datasets, results and the team stay in EsaSim.

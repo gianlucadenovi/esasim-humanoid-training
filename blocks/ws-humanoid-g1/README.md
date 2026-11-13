@@ -20,7 +20,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 
 | | |
 |---|---|
-| Block | `ws-humanoid-g1` · version 10 |
+| Block | `ws-humanoid-g1` · version 11 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
 | Runs on | Any machine, NVIDIA GPU |
@@ -55,7 +55,7 @@ An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Pyth
 | `training` Training | select | `"Continue"` | Continue: carry on from this robot's policy with the most experience (wired in, or checkpoints stopped runs left on this machine), with its optimizer; Start over: learn from nothing |
 | `speed` Walking speed (m/s) | number | `0.6` | Walk: the speed it starts at (the view's slider changes it) |
 | `heading` Heading (degrees) | number | `0` | Walk: on the circuit, beyond ±90° it goes round the other way (clockwise); on the flat floor, the way it walks |
-| `policy_file` Policy file | text | `""` | Walk: the name of the .pt to use among this robot's policies wired in (empty: the newest) |
+| `policy_file` Walking policy | text | `""` | Walk: which of this robot's walking policies wired in to use (empty: the newest) |
 | `after_fall` After a fall | select | `"Get up on its own"` | Walk: with a stand-up policy wired in, it gets up on its own (put back on its feet if still down after 10 s); else, or with Put back on its feet, it is set on its feet 3 s later |
 
 ## Use it in EsaSim

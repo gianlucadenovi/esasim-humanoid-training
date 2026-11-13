@@ -171,10 +171,21 @@
         },
         {
             "key": "policy_file",
-            "label": "Policy file",
+            "label": "Walking policy",
             "type": "text",
             "default": "",
-            "help": "Walk: the name of the .pt to use among this robot's policies wired in (empty: the newest)"
+            "help": "Walk: which of this robot's walking policies wired in to use (empty: the newest)",
+            "files_from": {
+                "port": "policy",
+                "pattern": "*.pt",
+                "by": "robot",
+                "match": {
+                    "Apptronik Apollo": "humanoid_apollo_walk_*",
+                    "Unitree G1": "humanoid_walk_*",
+                    "Unitree H1": "humanoid_h1_walk_*"
+                },
+                "empty": "The newest (chosen at each run)"
+            }
         },
         {
             "key": "after_fall",
@@ -199,6 +210,6 @@
         "warp-lang"
     ],
     "esasim": {
-        "version": 10
+        "version": 11
     }
 }

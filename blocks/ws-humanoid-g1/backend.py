@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid (ws-humanoid-g1) · version 10 · machine block, Python: def run(ctx)
+# Humanoid (ws-humanoid-g1) · version 11 · machine block, Python: def run(ctx)
 # A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on a GPU, on a flat floor or round a circuit, and to get up after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-13
@@ -24,7 +24,7 @@
 #   training    select    Training = "Continue" of Continue | Start over
 #   speed       number    Walking speed (m/s) = 0.6
 #   heading     number    Heading (degrees) = 0
-#   policy_file text      Policy file = ""
+#   policy_file text      Walking policy = ""
 #   after_fall  select    After a fall = "Get up on its own" of Get up on its own | Put back on its feet
 # Runs on  Any machine, NVIDIA GPU. Return a dict to fill the "result" output.
 # Packages torch, mujoco>=3.3, mujoco-warp, warp-lang (installed by the worker with pip when missing)
@@ -2201,6 +2201,8 @@ def walk_run(ctx):
         sim.water = PLAYGROUND.get("water")
     drive = [0.0, 0.0, 0.0]               # forward, sideways, turn: -1 to 1 each
     drive_at = 0.0
+    keep_yaw = None                       # the heading it holds while not told to turn (a policy left alone drifts round)
+    up_yaw = None                         # its heading the last time it was up (to stand it up again facing the same way)
     speed = float(p.get("speed") if p.get("speed") not in (None, "") else 0.6)
     heading = math.radians(float(p.get("heading") or 0.0))
     minutes = float(p.get("minutes") or 30)
@@ -2214,6 +2216,8 @@ def walk_run(ctx):
 
     def start(at=None, i=None):
         """on its feet: at the start line, or (at) where it fell, on its line (the playground: at its start, or where it fell)"""
+        nonlocal keep_yaw
+        keep_yaw = None
         if play:
             env.reset(one, at=at or list(PLAYGROUND["start"]))
             env.mode_line[:] = False
@@ -2339,7 +2343,7 @@ def walk_run(ctx):
                     wh = float(env.path_heading()[0])
                     ctx.telemetry(ch_ev, {"text": "A push (%.1f m/s, from the %s)" % (push_v, "left" if math.sin(float(ang) - wh) > 0 else "right")})
             elif c in ("reset", "stand up", "restart", "back to the start"):
-                getting_up, fell_at = False, None
+                getting_up, fell_at, keep_yaw = False, None, None
                 start()
                 sim_t += 0.5
                 run += 1
@@ -2357,12 +2361,24 @@ def walk_run(ctx):
             a = up_act(o)
         else:
             env.speed[:] = 0.0 if hold > 0 else speed
-            if play:                      # driven: forward up to Walking speed, back at half of it, 0.35 m/s aside, 0.9 rad/s round
+            if play:                      # driven: forward up to Walking speed, back at half of it, 0.35 m/s aside, 0.7 rad/s round
                 if time.time() - drive_at > 1.2:
                     drive = [0.0, 0.0, 0.0]          # (no word from the view for a while: it stops)
                 fx = drive[0] * (speed if drive[0] > 0 else 0.5 * speed)
                 env.mode_line[:] = False
-                env.cmd[0, 0], env.cmd[0, 1], env.cmd[0, 2] = (0.0, 0.0, 0.0) if hold > 0 else (fx, 0.35 * drive[1], 0.9 * drive[2])
+                q_ = sim.qpos[0]
+                yaw_ = math.atan2(2 * (float(q_[3]) * float(q_[6]) + float(q_[4]) * float(q_[5])), 1 - 2 * (float(q_[5]) ** 2 + float(q_[6]) ** 2))
+                if float(q_[2]) - float(env.ground(q_[0:1].float(), q_[1:2].float())[0]) > hs(0.6):
+                    up_yaw = yaw_
+                if abs(drive[2]) > 1e-3 or keep_yaw is None or fell_at is not None:
+                    keep_yaw, wz_ = yaw_, 0.7 * drive[2]      # (turning: the heading to keep is where it ends up)
+                else:                                     # not told to turn: it keeps its heading (a gentle correction, nothing within 3°)
+                    err = math.atan2(math.sin(keep_yaw - yaw_), math.cos(keep_yaw - yaw_))
+                    wz_ = 0.0 if abs(err) < math.radians(3) else max(-0.5, min(0.5, 1.5 * err))
+                tgt = (0.0, 0.0, 0.0) if hold > 0 else (fx, 0.35 * drive[1], wz_)
+                for k_, rate in ((0, 2.0), (1, 1.5), (2, 3.5)):      # (eased in and out over a few steps, as a joystick would: no jolts; a release stops it within 0.2 s)
+                    cur = float(env.cmd[0, k_])
+                    env.cmd[0, k_] = cur + max(-rate * CTRL_DT, min(rate * CTRL_DT, tgt[k_] - cur))
             hold -= CTRL_DT
             a = act(o[:, :walk_dim])
         rew, done, info = env.step(a)
@@ -2372,6 +2388,7 @@ def walk_run(ctx):
             frames.append(frame_row(env, 0, sim_t))
         if bool(info["fell"][0]) and fell_at is None:
             fell_at = sim_t
+            keep_yaw = None               # (up again: it keeps the heading it gets up with)
             falls_lap += 1
             where = (" on " + zone_text(zone, 0).split(":")[0].split(" (")[0].lower().replace(" down", "").replace(" up", "")) if zone else ""
             if up_act is not None:
@@ -2397,9 +2414,9 @@ def walk_run(ctx):
             fell_at = None
             if circuit:      # back on its feet on the circuit's line, a step further on
                 start(i=(int(env.pidx[0]) + 4 * dirn) % env.M)
-            elif play:       # back on its feet where it fell, facing the same way
+            elif play:       # back on its feet where it fell, facing the way it was going
                 q = sim.qpos[0]
-                start([float(q[0]), float(q[1]), math.atan2(2 * (float(q[3]) * float(q[6]) + float(q[4]) * float(q[5])), 1 - 2 * (float(q[5]) ** 2 + float(q[6]) ** 2))])
+                start([float(q[0]), float(q[1]), up_yaw if up_yaw is not None else 0.0])
             else:
                 q = sim.qpos[0]
                 ly, lyaw = float(env.line_y[0]), float(env.line_yaw[0])
@@ -2435,7 +2452,7 @@ def walk_run(ctx):
             s_last = s_now
         if int(env.steps[0]) >= EP_STEPS - 1:
             env.steps[:] = 0          # (walking on: the episode clock only matters in training)
-        if time.time() - last_send > 0.25 and frames:
+        if time.time() - last_send > (0.1 if play else 0.25) and frames:      # (driven by hand: sent more often, so the view keeps up)
             last_send = time.time()
             item = {"format": "esasim.humanoid/1", "kind": "live", "run": run, "t0": round(t_wall0, 3), "frames": frames, "label": "Walking: %s" % pol.name}
             if env.tiles_on:
