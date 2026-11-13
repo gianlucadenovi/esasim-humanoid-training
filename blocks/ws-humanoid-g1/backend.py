@@ -1,17 +1,18 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid G1 (ws-humanoid-g1) · version 6 · machine block, Python: def run(ctx)
-# A Unitree G1 humanoid (29 joints) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up on its own after a fall
+# Humanoid (ws-humanoid-g1) · version 7 · machine block, Python: def run(ctx)
+# A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on the GPU, on a flat floor or round a circuit seeing the ground ahead, and learns to get up o
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
-# Saved: 2026-11-12
+# Saved: 2026-11-13
 #
 # Inputs   ctx.inputs["id"] is a list of files: .path .name .size .read_text() .read_json()
-#   policy      Files (pt)                Policy · several · optional · Policies (.pt): walking ones and stand-up ones. Walk uses the newest of each; each training carries on from its own kind
+#   policy      Files (pt)                Policy · several · optional · Policies (.pt), walking and stand-up, of any robot: each run uses only those of the robot chosen (Walk: the newest of each kind)
 # Outputs  ctx.output("id", "name.ext") is the path to write; ctx.write_json / ctx.write_text
-#   policy      Files (pt)                Policy · humanoid_walk_[circuit_]<date>_<NN>.pt (Learn to walk) or humanoid_standup_<date>_<NN>.pt (Learn to stand up): the best policy learned (network, input scaling, optimizer, ground, score)
+#   policy      Files (pt)                Policy · humanoid_[h1_|apollo_]walk_[circuit_]<date>_<NN>.pt or humanoid_[h1_|apollo_]standup_<date>_<NN>.pt: the best policy (network, input scaling, optimizer, robot, ground, score)
 #   curve       Table (csv)               Learning curve · training.csv (Learn to walk) or standup.csv (Learn to stand up)
 #   telemetry   Live telemetry            ctx.telemetry("channel", data) while it runs
 # Settings ctx.params["key"]
 #   mode        select    What to do = "Learn to walk" of Learn to walk | Learn to stand up | Walk
+#   robot       select    Robot = "Unitree G1" of Unitree G1 | Unitree H1 | Apptronik Apollo
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
 #   terrain     select    Ground = "Flat floor" of Flat floor | Circuit
 #   robots      number    Robots learning at once = 4096
@@ -30,7 +31,8 @@
 # EsaSim rewrites these lines from the block's definition each time it is saved: change the definition, not them.
 # ── end of EsaSim block header ────────────────────────────────────────
 
-"""Humanoid training: a Unitree G1 humanoid (29 joints, 35 kg) learns to walk in MuJoCo, the physics engine robotics
+"""Humanoid training: a humanoid robot (by default the Unitree G1, 29 joints, 35 kg; with Robot, the Unitree H1 or the
+Apptronik Apollo) learns to walk in MuJoCo, the physics engine robotics
 research uses, on a flat floor or round a circuit (bumps, a ramp up to a plateau and down, blocks, moving tiles, a
 staircase of 10 steps up and 10 down, and a yard of practice stairs). Many robots learn at once on the NVIDIA GPU (MuJoCo
 Warp), or on the CPU. The robot's model: its 30 links with their masses and inertias, its joints with their limits, the
@@ -51,6 +53,177 @@ import math
 
 # the robot: Unitree G1, 29 joints (MuJoCo Menagerie, BSD-3; collision set of MuJoCo Playground, Apache 2.0), meshes left out
 MODEL_XML = r'''<mujoco model="g1_29dof"><compiler angle="radian" /><option iterations="3" ls_iterations="5" timestep=".002" integrator="Euler"><flag eulerdamp="disable" /></option><default><default class="g1"><geom condim="1" contype="0" conaffinity="0" /><joint frictionloss="0.1" damping="2" /><position inheritrange="1" kp="75" /><default class="hip"><default class="hip_pitch"><joint axis="0 1 0" range="-2.5307 2.8798" actuatorfrcrange="-88 88" armature="0.01017752004" /></default><default class="hip_roll"><joint axis="1 0 0" range="-0.5236 2.9671" actuatorfrcrange="-139 139" armature="0.025101925" /></default><default class="hip_yaw"><joint axis="0 0 1" range="-2.7576 2.7576" actuatorfrcrange="-88 88" armature="0.01017752004" /></default></default><default class="knee"><joint axis="0 1 0" range="-0.087267 2.8798" actuatorfrcrange="-139 139" armature="0.025101925" /></default><default class="ankle"><default class="ankle_pitch"><position kp="20" /><joint axis="0 1 0" range="-0.87267 0.5236" actuatorfrcrange="-50 50" damping="1" armature="0.00721945" /></default><default class="ankle_roll"><position kp="2" /><joint axis="1 0 0" range="-0.2618 0.2618" actuatorfrcrange="-50 50" damping=".2" armature="0.00721945" /></default></default><default class="waist_yaw"><joint axis="0 0 1" range="-2.618 2.618" actuatorfrcrange="-88 88" armature="0.01017752004" /></default><default class="waist_pitch"><joint axis="0 1 0" range="-0.52 0.52" actuatorfrcrange="-50 50" armature="0.00721945" /></default><default class="waist_roll"><joint axis="1 0 0" range="-0.52 0.52" actuatorfrcrange="-50 50" armature="0.00721945" /></default><default class="shoulder"><default class="shoulder_pitch"><joint axis="0 1 0" range="-3.0892 2.6704" actuatorfrcrange="-25 25" armature="0.003609725" /></default><default class="shoulder_roll"><joint axis="1 0 0" actuatorfrcrange="-25 25" armature="0.003609725" /></default><default class="shoulder_yaw"><joint axis="0 0 1" range="-2.618 2.618" actuatorfrcrange="-25 25" armature="0.003609725" /></default></default><default class="elbow"><joint axis="0 1 0" range="-1.0472 2.0944" actuatorfrcrange="-25 25" armature="0.003609725" /></default><default class="wrist"><position kp="2" /><joint damping=".2" /><default class="wrist_roll"><joint axis="1 0 0" range="-1.97222 1.97222" actuatorfrcrange="-25 25" armature="0.003609725" /></default><default class="wrist_pitch"><joint axis="0 1 0" range="-1.61443 1.61443" actuatorfrcrange="-5 5" armature="0.00425" /></default><default class="wrist_yaw"><joint axis="0 0 1" range="-1.61443 1.61443" actuatorfrcrange="-5 5" armature="0.00425" /></default></default><default class="visual"><geom group="2" type="mesh" density="0" material="silver" /></default><default class="collision"><geom group="3" rgba=".2 .6 .2 .3" /><default class="foot"><geom size="0.085 0.03 0.005" /></default></default><site group="5" rgba="1 0 0 1" /></default></default><asset><hfield name="terrain" nrow="581" ncol="921" size="23 14.5 2 0.1" /><material name="silver" rgba="0.7 0.7 0.7 1" /><material name="black" rgba="0.2 0.2 0.2 1" /></asset><worldbody><geom name="floor" size="0 0 0.01" type="plane" pos="0 0 -0.001" /><geom name="terrain" type="hfield" hfield="terrain" pos="15 7.5 -0.05" /><light name="spotlight" mode="targetbodycom" target="pelvis" pos="0 -2 4" exponent="20" /><body name="pelvis" pos="0 0 0.793" childclass="g1"><geom name="pelvis_col" class="collision" type="capsule" size="0.07" fromto="0 -0.07 -0.06 0 0.07 -0.06" /><camera name="track" pos="1.734 -1.135 .35" xyaxes="0.552 0.834 -0.000 -0.170 0.112 0.979" mode="trackcom" /><inertial pos="0 0 -0.07605" quat="1 0 -0.000399148 0" mass="3.813" diaginertia="0.010549 0.0093089 0.0079184" /><freejoint name="floating_base_joint" /><site name="imu_in_pelvis" size="0.01" pos="0.04525 0 -0.08339" /><body name="left_hip_pitch_link" pos="0 0.064452 -0.1027"><inertial pos="0.002741 0.047791 -0.02606" quat="0.954862 0.293964 0.0302556 0.030122" mass="1.35" diaginertia="0.00181517 0.00153422 0.00116212" /><joint name="left_hip_pitch_joint" class="hip_pitch" /><body name="left_hip_roll_link" pos="0 0.052 -0.030465" quat="0.996179 0 -0.0873386 0"><inertial pos="0.029812 -0.001045 -0.087934" quat="0.977808 -1.97119e-05 0.205576 -0.0403793" mass="1.52" diaginertia="0.00254986 0.00241169 0.00148755" /><joint name="left_hip_roll_joint" class="hip_roll" /><geom name="left_thigh" class="collision" type="capsule" size="0.06" fromto="0.02 0 0 0.02 0 -0.2" /><body name="left_hip_yaw_link" pos="0.025001 0 -0.12412"><inertial pos="-0.057709 -0.010981 -0.15078" quat="0.600598 0.15832 0.223482 0.751181" mass="1.702" diaginertia="0.00776166 0.00717575 0.00160139" /><joint name="left_hip_yaw_joint" class="hip_yaw" /><body name="left_knee_link" pos="-0.078273 0.0021489 -0.17734" quat="0.996179 0 0.0873386 0"><inertial pos="0.005457 0.003964 -0.12074" quat="0.923418 -0.0327699 0.0158246 0.382067" mass="1.932" diaginertia="0.0113804 0.0112778 0.00146458" /><joint name="left_knee_joint" class="knee" /><geom name="left_shin" class="collision" type="capsule" size="0.08" fromto="0.02 0 0 0.02 0 -0.25" /><body name="left_ankle_pitch_link" pos="0 -9.4445e-05 -0.30001"><inertial pos="-0.007269 0 0.011137" quat="0.603053 0.369225 0.369225 0.603053" mass="0.074" diaginertia="1.89e-05 1.40805e-05 6.9195e-06" /><joint name="left_ankle_pitch_joint" class="ankle_pitch" /><body name="left_ankle_roll_link" pos="0 0 -0.017558"><site name="left_foot" rgba="1 0 0 1" /><inertial pos="0.026505 0 -0.016425" quat="-0.000481092 0.728482 -0.000618967 0.685065" mass="0.608" diaginertia="0.00167218 0.0016161 0.000217621" /><joint name="left_ankle_roll_joint" class="ankle_roll" /><geom name="left_foot" class="foot" pos="0.04 0 -0.029" size="0.09 0.03 0.008" type="box" conaffinity="2" friction="0.8 0.02 0.01" /></body></body></body></body></body></body><body name="right_hip_pitch_link" pos="0 -0.064452 -0.1027"><inertial pos="0.002741 -0.047791 -0.02606" quat="0.954862 -0.293964 0.0302556 -0.030122" mass="1.35" diaginertia="0.00181517 0.00153422 0.00116212" /><joint name="right_hip_pitch_joint" class="hip_pitch" /><body name="right_hip_roll_link" pos="0 -0.052 -0.030465" quat="0.996179 0 -0.0873386 0"><inertial pos="0.029812 0.001045 -0.087934" quat="0.977808 1.97119e-05 0.205576 0.0403793" mass="1.52" diaginertia="0.00254986 0.00241169 0.00148755" /><joint name="right_hip_roll_joint" class="hip_roll" /><geom name="right_thigh" class="collision" type="capsule" size="0.06" fromto="0.02 0 0 0.02 0 -0.2" /><body name="right_hip_yaw_link" pos="0.025001 0 -0.12412"><inertial pos="-0.057709 0.010981 -0.15078" quat="0.751181 0.223482 0.15832 0.600598" mass="1.702" diaginertia="0.00776166 0.00717575 0.00160139" /><joint name="right_hip_yaw_joint" class="hip_yaw" /><body name="right_knee_link" pos="-0.078273 -0.0021489 -0.17734" quat="0.996179 0 0.0873386 0"><inertial pos="0.005457 -0.003964 -0.12074" quat="0.923439 0.0345276 0.0116333 -0.382012" mass="1.932" diaginertia="0.011374 0.0112843 0.00146452" /><joint name="right_knee_joint" class="knee" /><geom name="right_shin" class="collision" type="capsule" size="0.08" fromto="0.02 0 0 0.02 0 -0.25" /><body name="right_ankle_pitch_link" pos="0 9.4445e-05 -0.30001"><inertial pos="-0.007269 0 0.011137" quat="0.603053 0.369225 0.369225 0.603053" mass="0.074" diaginertia="1.89e-05 1.40805e-05 6.9195e-06" /><joint name="right_ankle_pitch_joint" class="ankle_pitch" /><body name="right_ankle_roll_link" pos="0 0 -0.017558"><site name="right_foot" pos="0 0 0" /><inertial pos="0.026505 0 -0.016425" quat="0.000481092 0.728482 0.000618967 0.685065" mass="0.608" diaginertia="0.00167218 0.0016161 0.000217621" /><joint name="right_ankle_roll_joint" class="ankle_roll" /><geom name="right_foot" class="foot" pos="0.04 0 -0.029" size="0.09 0.03 0.008" type="box" conaffinity="2" friction="0.8 0.02 0.01" /></body></body></body></body></body></body><body name="waist_yaw_link"><inertial pos="0.003494 0.000233 0.018034" quat="0.289697 0.591001 -0.337795 0.672821" mass="0.214" diaginertia="0.000163531 0.000107714 0.000102205" /><joint name="waist_yaw_joint" class="waist_yaw" /><body name="waist_roll_link" pos="-0.0039635 0 0.044"><inertial pos="0 2.3e-05 0" quat="0.5 0.5 -0.5 0.5" mass="0.086" diaginertia="8.245e-06 7.079e-06 6.339e-06" /><joint name="waist_roll_joint" class="waist_roll" /><body name="torso_link"><geom name="torso_col" class="collision" type="capsule" size="0.1" fromto="0 0 0.08 0 0 0.34" /><geom name="head_col" class="collision" type="sphere" size="0.09" pos="0.01 0 0.45" /><inertial pos="0.00203158 0.000339683 0.184568" quat="0.999803 -6.03319e-05 0.0198256 0.00131986" mass="7.818" diaginertia="0.121847 0.109825 0.0273735" /><joint name="waist_pitch_joint" class="waist_pitch" /><site name="imu_in_torso" size="0.01" pos="-0.03959 -0.00224 0.14792" /><body name="left_shoulder_pitch_link" pos="0.0039563 0.10022 0.24778" quat="0.990264 0.139201 1.38722e-05 -9.86868e-05"><inertial pos="0 0.035892 -0.011628" quat="0.654152 0.0130458 -0.326267 0.68225" mass="0.718" diaginertia="0.000465864 0.000432842 0.000406394" /><joint name="left_shoulder_pitch_joint" class="shoulder_pitch" /><geom size="0.03 0.025" pos="0 0.04 -0.01" quat="0.707107 0 0.707107 0" type="cylinder" class="visual" /><body name="left_shoulder_roll_link" pos="0 0.038 -0.013831" quat="0.990268 -0.139172 0 0"><inertial pos="-0.000227 0.00727 -0.063243" quat="0.701256 -0.0196223 -0.00710317 0.712604" mass="0.643" diaginertia="0.000691311 0.000618011 0.000388977" /><joint name="left_shoulder_roll_joint" range="-1.5882 2.2515" class="shoulder_roll" /><geom size="0.03 0.015" pos="-0.004 0.006 -0.053" type="cylinder" class="visual" /><body name="left_shoulder_yaw_link" pos="0 0.00624 -0.1032"><inertial pos="0.010773 -0.002949 -0.072009" quat="0.716879 -0.0964829 -0.0679942 0.687134" mass="0.734" diaginertia="0.00106187 0.00103217 0.000400661" /><joint name="left_shoulder_yaw_joint" class="shoulder_yaw" /><body name="left_elbow_link" pos="0.015783 0 -0.080518"><inertial pos="0.064956 0.004454 -0.010062" quat="0.541765 0.636132 0.388821 0.388129" mass="0.6" diaginertia="0.000443035 0.000421612 0.000259353" /><joint name="left_elbow_joint" class="elbow" /><body name="left_wrist_roll_link" pos="0.1 0.00188791 -0.01"><inertial pos="0.0171394 0.000537591 4.8864e-07" quat="0.575338 0.411667 -0.574906 0.411094" mass="0.085445" diaginertia="5.48211e-05 4.96646e-05 3.57798e-05" /><joint name="left_wrist_roll_joint" class="wrist_roll" /><body name="left_wrist_pitch_link" pos="0.038 0 0"><inertial pos="0.0229999 -0.00111685 -0.00111658" quat="0.249998 0.661363 0.293036 0.643608" mass="0.48405" diaginertia="0.000430353 0.000429873 0.000164648" /><joint name="left_wrist_pitch_joint" class="wrist_pitch" /><body name="left_wrist_yaw_link" pos="0.046 0 0"><inertial pos="0.0708244 0.000191745 0.00161742" quat="0.510571 0.526295 0.468078 0.493188" mass="0.254576" diaginertia="0.000646113 0.000559993 0.000147566" /><joint name="left_wrist_yaw_joint" class="wrist_yaw" /><site name="left_palm" pos="0.08 0 0" size="0.01" /><geom name="left_hand_collision" class="collision" type="capsule" size="0.05" fromto="0.05 0 0 0.1 0 0" rgba=".2 .6 .2 .2" /></body></body></body></body></body></body></body><body name="right_shoulder_pitch_link" pos="0.0039563 -0.10021 0.24778" quat="0.990264 -0.139201 1.38722e-05 9.86868e-05"><inertial pos="0 -0.035892 -0.011628" quat="0.68225 -0.326267 0.0130458 0.654152" mass="0.718" diaginertia="0.000465864 0.000432842 0.000406394" /><joint name="right_shoulder_pitch_joint" class="shoulder_pitch" /><geom size="0.03 0.025" pos="0 -0.04 -0.01" quat="0.707107 0 0.707107 0" type="cylinder" class="visual" /><body name="right_shoulder_roll_link" pos="0 -0.038 -0.013831" quat="0.990268 0.139172 0 0"><inertial pos="-0.000227 -0.00727 -0.063243" quat="0.712604 -0.00710317 -0.0196223 0.701256" mass="0.643" diaginertia="0.000691311 0.000618011 0.000388977" /><joint name="right_shoulder_roll_joint" range="-2.2515 1.5882" class="shoulder_roll" /><geom size="0.03 0.015" pos="-0.004 -0.006 -0.053" type="cylinder" class="visual" /><body name="right_shoulder_yaw_link" pos="0 -0.00624 -0.1032"><inertial pos="0.010773 0.002949 -0.072009" quat="0.687134 -0.0679942 -0.0964829 0.716879" mass="0.734" diaginertia="0.00106187 0.00103217 0.000400661" /><joint name="right_shoulder_yaw_joint" class="shoulder_yaw" /><body name="right_elbow_link" pos="0.015783 0 -0.080518"><inertial pos="0.064956 -0.004454 -0.010062" quat="0.388129 0.388821 0.636132 0.541765" mass="0.6" diaginertia="0.000443035 0.000421612 0.000259353" /><joint name="right_elbow_joint" class="elbow" /><body name="right_wrist_roll_link" pos="0.1 -0.00188791 -0.01"><inertial pos="0.0171394 -0.000537591 4.8864e-07" quat="0.411667 0.575338 -0.411094 0.574906" mass="0.085445" diaginertia="5.48211e-05 4.96646e-05 3.57798e-05" /><joint name="right_wrist_roll_joint" class="wrist_roll" /><body name="right_wrist_pitch_link" pos="0.038 0 0"><inertial pos="0.0229999 0.00111685 -0.00111658" quat="0.643608 0.293036 0.661363 0.249998" mass="0.48405" diaginertia="0.000430353 0.000429873 0.000164648" /><joint name="right_wrist_pitch_joint" class="wrist_pitch" /><body name="right_wrist_yaw_link" pos="0.046 0 0"><inertial pos="0.0708244 -0.000191745 0.00161742" quat="0.493188 0.468078 0.526295 0.510571" mass="0.254576" diaginertia="0.000646113 0.000559993 0.000147566" /><joint name="right_wrist_yaw_joint" class="wrist_yaw" /><site name="right_palm" pos="0.08 0 0" size="0.01" /><geom name="right_hand_collision" class="collision" type="capsule" size="0.05" fromto="0.05 0 0 0.1 0 0" rgba=".2 .6 .2 .2" /></body></body></body></body></body></body></body></body></body></body></body></worldbody><contact><pair name="left_foot_floor" geom1="left_foot" geom2="floor" condim="3" friction="0.6 0.6" /><pair name="right_foot_floor" geom1="right_foot" geom2="floor" condim="3" friction="0.6 0.6" /><pair name="left_foot_terrain" geom1="left_foot" geom2="terrain" condim="3" friction="0.8 0.8" /><pair name="right_foot_terrain" geom1="right_foot" geom2="terrain" condim="3" friction="0.8 0.8" /><pair name="left_hand_thigh" geom1="left_hand_collision" geom2="left_thigh" condim="1" /><pair name="right_hand_thigh" geom1="right_hand_collision" geom2="right_thigh" condim="1" /><pair name="left_foot_right_foot" geom1="left_foot" geom2="right_foot" condim="1" /><pair geom1="floor" geom2="left_shin" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="right_shin" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="left_thigh" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="right_thigh" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="left_hand_collision" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="right_hand_collision" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="pelvis_col" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="torso_col" condim="3" friction="0.6 0.6" /><pair geom1="floor" geom2="head_col" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="left_shin" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="right_shin" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="left_thigh" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="right_thigh" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="left_hand_collision" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="right_hand_collision" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="pelvis_col" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="torso_col" condim="3" friction="0.6 0.6" /><pair geom1="terrain" geom2="head_col" condim="3" friction="0.6 0.6" /></contact><actuator><position class="hip_pitch" name="left_hip_pitch_joint" joint="left_hip_pitch_joint" /><position class="hip_roll" name="left_hip_roll_joint" joint="left_hip_roll_joint" /><position class="hip_yaw" name="left_hip_yaw_joint" joint="left_hip_yaw_joint" /><position class="knee" name="left_knee_joint" joint="left_knee_joint" /><position class="ankle_pitch" name="left_ankle_pitch_joint" joint="left_ankle_pitch_joint" /><position class="ankle_roll" name="left_ankle_roll_joint" joint="left_ankle_roll_joint" /><position class="hip_pitch" name="right_hip_pitch_joint" joint="right_hip_pitch_joint" /><position class="hip_roll" name="right_hip_roll_joint" joint="right_hip_roll_joint" /><position class="hip_yaw" name="right_hip_yaw_joint" joint="right_hip_yaw_joint" /><position class="knee" name="right_knee_joint" joint="right_knee_joint" /><position class="ankle_pitch" name="right_ankle_pitch_joint" joint="right_ankle_pitch_joint" /><position class="ankle_roll" name="right_ankle_roll_joint" joint="right_ankle_roll_joint" /><position class="waist_yaw" name="waist_yaw_joint" joint="waist_yaw_joint" /><position class="waist_roll" name="waist_roll_joint" joint="waist_roll_joint" /><position class="waist_pitch" name="waist_pitch_joint" joint="waist_pitch_joint" /><position class="shoulder_pitch" name="left_shoulder_pitch_joint" joint="left_shoulder_pitch_joint" /><position class="shoulder_roll" name="left_shoulder_roll_joint" joint="left_shoulder_roll_joint" /><position class="shoulder_yaw" name="left_shoulder_yaw_joint" joint="left_shoulder_yaw_joint" /><position class="elbow" name="left_elbow_joint" joint="left_elbow_joint" /><position class="wrist_roll" name="left_wrist_roll_joint" joint="left_wrist_roll_joint" /><position class="wrist_pitch" name="left_wrist_pitch_joint" joint="left_wrist_pitch_joint" /><position class="wrist_yaw" name="left_wrist_yaw_joint" joint="left_wrist_yaw_joint" /><position class="shoulder_pitch" name="right_shoulder_pitch_joint" joint="right_shoulder_pitch_joint" /><position class="shoulder_roll" name="right_shoulder_roll_joint" joint="right_shoulder_roll_joint" /><position class="shoulder_yaw" name="right_shoulder_yaw_joint" joint="right_shoulder_yaw_joint" /><position class="elbow" name="right_elbow_joint" joint="right_elbow_joint" /><position class="wrist_roll" name="right_wrist_roll_joint" joint="right_wrist_roll_joint" /><position class="wrist_pitch" name="right_wrist_pitch_joint" joint="right_wrist_pitch_joint" /><position class="wrist_yaw" name="right_wrist_yaw_joint" joint="right_wrist_yaw_joint" /></actuator><sensor><framezaxis objtype="site" objname="imu_in_torso" name="upvector_torso" /><velocimeter site="imu_in_torso" name="local_linvel_torso" /><velocimeter site="imu_in_pelvis" name="local_linvel_pelvis" /><accelerometer site="imu_in_torso" name="accelerometer_torso" /><accelerometer site="imu_in_pelvis" name="accelerometer_pelvis" /><gyro site="imu_in_torso" name="gyro_torso" /><gyro site="imu_in_pelvis" name="gyro_pelvis" /><framezaxis objtype="site" objname="imu_in_pelvis" name="upvector_pelvis" /><framexaxis objtype="site" objname="imu_in_torso" name="forwardvector_torso" /><framexaxis objtype="site" objname="imu_in_pelvis" name="forwardvector_pelvis" /><framequat objtype="site" objname="imu_in_torso" name="orientation_torso" /><framequat objtype="site" objname="imu_in_pelvis" name="orientation_pelvis" /><framelinvel objtype="site" objname="imu_in_torso" name="global_linvel_torso" /><framelinvel objtype="site" objname="imu_in_pelvis" name="global_linvel_pelvis" /><frameangvel objtype="site" objname="imu_in_torso" name="global_angvel_torso" /><frameangvel objtype="site" objname="imu_in_pelvis" name="global_angvel_pelvis" /><framelinvel objtype="site" objname="left_foot" name="left_foot_global_linvel" /><framelinvel objtype="site" objname="right_foot" name="right_foot_global_linvel" /><framezaxis objtype="site" objname="left_foot" name="left_foot_upvector" /><framezaxis objtype="site" objname="right_foot" name="right_foot_upvector" /><force name="left_foot_force" site="left_foot" /><force name="right_foot_force" site="right_foot" /><contact name="left_foot_floor_found" geom1="left_foot" geom2="floor" reduce="mindist" num="1" data="found" /><contact name="right_foot_floor_found" geom1="right_foot" geom2="floor" reduce="mindist" num="1" data="found" /><contact name="left_foot_terrain_found" geom1="left_foot" geom2="terrain" reduce="mindist" num="1" data="found" /><contact name="right_foot_terrain_found" geom1="right_foot" geom2="terrain" reduce="mindist" num="1" data="found" /><contact name="right_foot_left_foot_found" geom1="right_foot" geom2="left_foot" reduce="mindist" num="1" data="found" /><contact name="left_foot_right_shin_found" geom1="left_foot" geom2="right_shin" reduce="mindist" num="1" data="found" /><contact name="right_foot_left_shin_found" geom1="right_foot" geom2="left_shin" reduce="mindist" num="1" data="found" /><contact name="left_hand_left_thigh_found" geom1="left_hand_collision" geom2="left_thigh" reduce="mindist" num="1" data="found" /><contact name="right_hand_right_thigh_found" geom1="right_hand_collision" geom2="right_thigh" reduce="mindist" num="1" data="found" /><framepos objtype="site" objname="left_foot" name="left_foot_pos" /><framepos objtype="site" objname="right_foot" name="right_foot_pos" /><framezaxis objtype="body" objname="torso_link" name="torso_zaxis" /></sensor><keyframe><key name="home" qpos=" 0 0 0.785 1 0 0 0 -0.1 0 0 0.3 -0.2 0 -0.1 0 0 0.3 -0.2 0 0 0 0 0.2 0.2 0 1.28 0 0 0 0.2 -0.2 0 1.28 0 0 0 " ctrl=" -0.1 0 0 0.3 -0.2 0 -0.1 0 0 0.3 -0.2 0 0 0 0 0.2 0.2 0 1.28 0 0 0 0.2 -0.2 0 1.28 0 0 0 " /><key name="knees_bent" qpos=" 0 0 0.755 1 0 0 0 -0.312 0 0 0.669 -0.363 0 -0.312 0 0 0.669 -0.363 0 0 0 0.073 0.2 0.2 0 0.6 0 0 0 0.2 -0.2 0 0.6 0 0 0 " ctrl=" -0.312 0 0 0.669 -0.363 0 -0.312 0 0 0.669 -0.363 0 0 0 0.073 0.2 0.2 0 0.6 0 0 0 0.2 -0.2 0 0.6 0 0 0 " /></keyframe></mujoco>'''
+
+# the Unitree H1 (MuJoCo Menagerie, Unitree Robotics, BSD-3) and the Apptronik Apollo (MuJoCo Menagerie, Apptronik, Apache 2.0),
+# in the conventions above (meshes left out), compressed (zlib, base64)
+H1_XML_Z = '''
+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
+qTXqk/nnv37+D5SaPy8=
+'''
+APOLLO_XML_Z = '''
+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
+'''
+
+
+# ── the robots: the Unitree G1 (the default), the Unitree H1 and the Apptronik Apollo ─────────────────────────────────
+# Each robot's MuJoCo model follows the same conventions (made from MuJoCo Menagerie by the same converter): its root
+# body is "pelvis", its torso "torso_link"; the IMU sites imu_in_pelvis and imu_in_torso; the feet are boxes named
+# left_foot / right_foot (with sites of the same name at the ankles); the shapes that may touch the ground are named
+# left_shin, left_thigh, left_hand_collision, pelvis_col, torso_col, head_col (and right_…); the sensors, the contact
+# pairs and the keyframes "home" and "knees_bent" are those of the G1. The joints keep the G1's names where they match
+# (left_hip_pitch_joint, left_knee_joint…). So the task, the rewards and the view work for each; what differs is said
+# here: the standing pelvis height h0 (the falls, the standing test, the elevation map scale with it), the head camera,
+# the 3D model, the credit.
+def _xml(z):
+    import base64
+    import zlib
+    return zlib.decompress(base64.b64decode(z)).decode()
+
+
+ROBOTS = {
+    "g1": {"name": "Unitree G1", "short": "G1", "xml": lambda: MODEL_XML, "h0": 0.755, "view": "g1",
+           "camera": {"body": "torso_link", "pos": [0.0576, 0.0175, 0.4299], "pitch": 0.8308, "fov_h": 69.0, "aspect": 1.7778,
+                      "name": "Intel RealSense D435i in the head"},
+           "credit": "Unitree G1: MuJoCo Menagerie (BSD-3) and MuJoCo Playground (Apache 2.0); 3D model KenzoDkohno22T, CC BY 4.0"},
+    "h1": {"name": "Unitree H1", "short": "H1", "xml": lambda: _xml(H1_XML_Z), "h0": 0.982, "view": "robot-h1",
+           "camera": {"body": "torso_link", "pos": [0.095, 0.0, 0.62], "pitch": 0.8308, "fov_h": 69.0, "aspect": 1.7778,
+                      "name": "Intel RealSense D435i in the head"},
+           "credit": "Unitree H1: MuJoCo Menagerie, Unitree Robotics (BSD-3)"},
+    "apollo": {"name": "Apptronik Apollo", "short": "Apollo", "xml": lambda: _xml(APOLLO_XML_Z), "h0": 1.023, "view": "robot-apollo",
+               "camera": {"body": "neck_pitch_link", "pos": [0.15, 0.0, 0.0], "pitch": 0.70, "fov_h": 69.0, "aspect": 1.7778,
+                          "name": "a depth camera in the head"},
+               "credit": "Apptronik Apollo: MuJoCo Menagerie, Apptronik (Apache 2.0)"},
+}
+ROBOT_OF = {"unitree g1": "g1", "g1": "g1", "unitree h1": "h1", "h1": "h1", "apptronik apollo": "apollo", "apollo": "apollo"}
+ROBOT = "g1"            # the robot in use (use_robot sets it, and the sizes that follow from it)
+NU = 29                 # its joints (motors)
+H0 = 0.755              # its pelvis' height standing (knees bent)
+
+
+def robot_id(p):
+    """the robot a block's settings ask for (the G1 when none)"""
+    return ROBOT_OF.get(str(p.get("robot") or "Unitree G1").strip().lower(), "g1")
+
+
+def use_robot(rid, mujoco):
+    """sets the robot: its model's size decides what the policy reads and does"""
+    global ROBOT, NU, H0, OBS_BASE, PRIV_BASE, OBS_DIM, PRIV_DIM, MODEL_IN_USE, FIELDS
+    ROBOT, R = rid, ROBOTS[rid]
+    MODEL_IN_USE = R["xml"]()
+    m = mujoco.MjModel.from_xml_string(MODEL_IN_USE)
+    NU, H0 = int(m.nu), float(R["h0"])
+    OBS_BASE = 3 + 3 + 3 + 3 + NU + NU + NU + 4
+    PRIV_BASE = OBS_BASE + 1 + 2 + 2 + 6 + 3 + 3
+    OBS_DIM, PRIV_DIM = OBS_BASE + N_SCAN, PRIV_BASE + N_SCAN
+    FIELDS = make_fields(NU)
+    return R
+
+
+def hs(v):
+    """a height set for the G1 (pelvis 0.755 m standing), for the robot in use"""
+    return v * H0 / 0.755
+
+
+MODEL_IN_USE = None
 
 
 # ── the physics: MuJoCo, many robots at once ──────────────────────────────────────────────────────────────────────
@@ -195,7 +368,7 @@ def tiles_xml(t=None):
 
 def load_model(mujoco, terrain="circuit"):
     import numpy as np
-    m = mujoco.MjModel.from_xml_string(MODEL_XML.replace("</worldbody>", tiles_xml() + "</worldbody>"))
+    m = mujoco.MjModel.from_xml_string((MODEL_IN_USE or MODEL_XML).replace("</worldbody>", tiles_xml() + "</worldbody>"))
     m.opt.timestep = SIM_DT
     H = ground_grid(terrain)
     hid = m.hfield("terrain").id
@@ -498,10 +671,21 @@ class WalkEnv:
             sid = mjm.sensor(s).id
             a, d = int(mjm.sensor_adr[sid]), int(mjm.sensor_dim[sid])
             self.sadr[s] = slice(a, a + d)
+        # what differs with the robot: the torso's lean standing (the G1's as Playground has it), the feet's load limit
+        if ROBOT == "g1":
+            tz0 = [0.073, 0.0, 1.0]
+        else:
+            import mujoco
+            d0 = mujoco.MjData(mjm)
+            mujoco.mj_resetDataKeyframe(mjm, d0, key.id)
+            mujoco.mj_forward(mjm, d0)
+            tz0 = [float(x) for x in d0.sensordata[self.sadr["torso_zaxis"]]]
+        self.tz0 = torch.tensor(tz0, **f)
+        self.f_max = 500.0 * float(mjm.body_subtreemass[mjm.body("pelvis").id]) / 33.34
         n = self.n
         z = lambda *s: torch.zeros(n, *s, **f)   # noqa: E731
         self.cmd = z(3)
-        self.last_act, self.act = z(29), z(29)
+        self.last_act, self.act = z(NU), z(NU)
         self.phase, self.phase_dt = z(2), z()
         self.air = z(2)
         self.last_contact = torch.zeros(n, 2, dtype=torch.bool, device=dev)
@@ -688,7 +872,7 @@ class WalkEnv:
             else:
                 qpos[:, 0:2] += self.U(k, -0.5, 0.5, 2)
                 yaw = self.U(k, -math.pi, math.pi)
-            qpos[:, 7:] = qpos[:, 7:] * self.U(k, 0.5, 1.5, 29)
+            qpos[:, 7:] = qpos[:, 7:] * self.U(k, 0.5, 1.5, NU)
             qvel[:, 0:6] = self.U(k, -0.5, 0.5, 6)
         else:
             yaw = torch.zeros(k, device=self.dev)
@@ -795,7 +979,7 @@ class WalkEnv:
         c, s_ = torch.cos(yaw).unsqueeze(-1), torch.sin(yaw).unsqueeze(-1)
         px = q[:, 0:1] + c * self.sx - s_ * self.sy
         py = q[:, 1:2] + s_ * self.sx + c * self.sy
-        h = (q[:, 2:3] - 0.75 - self.ground(px, py)).clamp(-1.0, 1.0)
+        h = (q[:, 2:3] - hs(0.75) - self.ground(px, py)).clamp(-1.0, 1.0)
         if noisy and self.noise > 0:
             h = h + self.scan_bias.unsqueeze(-1) + (2 * torch.rand(h.shape, device=self.dev, generator=self.g) - 1) * 0.02 * self.noise
         return h
@@ -853,7 +1037,7 @@ class WalkEnv:
         self.swing_peak = torch.maximum(self.swing_peak, feet_z)
         # falling, or feet tangled: the end
         tz = self.S("torso_zaxis")
-        fell = (self.height() < 0.45) | (tz[:, 2] < 0.5) | (self.S("right_foot_left_foot_found")[:, 0] > 0) | torch.isnan(q).any(-1) | torch.isnan(v).any(-1)
+        fell = (self.height() < hs(0.45)) | (tz[:, 2] < 0.5) | (self.S("right_foot_left_foot_found")[:, 0] > 0) | torch.isnan(q).any(-1) | torch.isnan(v).any(-1)
         # the rewards
         lin, gyro = self.S("local_linvel_pelvis"), self.S("gyro_pelvis")
         cmd = self.cmd
@@ -865,7 +1049,7 @@ class WalkEnv:
         r["tracking_lin_vel"] = torch.exp(-((cmd[:, :2] - lin[:, :2]) ** 2).sum(-1) / 0.25)
         r["tracking_ang_vel"] = torch.exp(-(cmd[:, 2] - gyro[:, 2]) ** 2 / 0.25)
         r["ang_vel_xy"] = (self.S("global_angvel_torso")[:, :2] ** 2).sum(-1)
-        r["orientation"] = ((tzh - torch.tensor([0.073, 0.0, 1.0], device=self.dev)) ** 2).sum(-1)
+        r["orientation"] = ((tzh - self.tz0) ** 2).sum(-1)
         air = ((self.air - 0.2) * first).clamp(max=0.3)
         r["feet_air_time"] = air.sum(-1)
         body_v = self.S("global_linvel_pelvis")[:, :2].norm(dim=-1)
@@ -879,7 +1063,7 @@ class WalkEnv:
         r["alive"] = (~fell).float()                      # staying up is worth something from the very first step
         r["collision"] = ((self.S("left_hand_left_thigh_found")[:, 0] > 0) | (self.S("right_hand_right_thigh_found")[:, 0] > 0)).float()
         fl, fr = self.S("left_foot_force")[:, 2].abs(), self.S("right_foot_force")[:, 2].abs()
-        r["contact_force"] = (fl - 500.0).clamp(min=0) + (fr - 500.0).clamp(min=0)
+        r["contact_force"] = (fl - self.f_max).clamp(min=0) + (fr - self.f_max).clamp(min=0)
         r["joint_deviation_knee"] = (jq[:, self.knee_i] - self.default[self.knee_i]).abs().sum(-1)
         hip = (jq[:, self.hip_i] - self.default[self.hip_i]).abs()
         lat = (cmd[:, 1].abs() > 0.1).unsqueeze(-1)
@@ -928,7 +1112,7 @@ STAND_SCALES = {"height": 3.0, "upright": 2.0, "pose": 2.0, "feet": 0.5, "still"
 
 def is_standing(h, tz):
     """on its feet: the pelvis at walking height and the torso upright"""
-    return (h > 0.65) & (tz > 0.85)
+    return (h > hs(0.65)) & (tz > 0.85)
 
 
 class StandEnv(WalkEnv):
@@ -959,19 +1143,19 @@ class StandEnv(WalkEnv):
         for _ in range(rounds):
             qpos = self.q0.unsqueeze(0).repeat(n, 1)
             qpos[:, 0:2] = self.U(n, -0.3, 0.3, 2)
-            qpos[:, 2] = self.U(n, 1.0, 1.2)
+            qpos[:, 2] = self.U(n, hs(1.0), hs(1.2))
             quat = torch.randn(n, 4, device=dev, generator=self.g)
             qpos[:, 3:7] = quat / quat.norm(dim=-1, keepdim=True)
-            qpos[:, 7:] = torch.maximum(torch.minimum(self.default + self.U(n, -0.3, 0.3, 29) * span, self.soft_hi), self.soft_lo)
+            qpos[:, 7:] = torch.maximum(torch.minimum(self.default + self.U(n, -0.3, 0.3, NU) * span, self.soft_hi), self.soft_lo)
             qvel = torch.zeros(n, self.m.nv, device=dev)
             qvel[:, 0:6] = self.U(n, -1.0, 1.0, 6)
-            targets = torch.maximum(torch.minimum(self.default + self.U(n, -0.25, 0.25, 29) * span, self.soft_hi), self.soft_lo)
+            targets = torch.maximum(torch.minimum(self.default + self.U(n, -0.25, 0.25, NU) * span, self.soft_hi), self.soft_lo)
             self.sim.set_rows(idx, qpos, qvel, targets)
             self.sim.set_lift(self.torso, torch.zeros(n, device=dev))
             for _ in range(100):
                 self.sim.step()
             q = self.sim.qpos.float().clone()
-            ok = ~torch.isnan(q).any(-1) & (self.height() < 0.45) & (self.sim.qvel.float().abs().amax(-1) < 5.0)
+            ok = ~torch.isnan(q).any(-1) & (self.height() < hs(0.45)) & (self.sim.qvel.float().abs().amax(-1) < 5.0)
             keep.append(q[ok])
         self.bank = torch.cat(keep)
         if log:
@@ -1023,7 +1207,7 @@ class StandEnv(WalkEnv):
         a = action.clamp(-5.0, 5.0)
         sim.ctrl.copy_((self.default + a * ACTION_SCALE).to(sim.ctrl.dtype))
         # the help: a share of its weight lifting the torso while it is low (none once it is up)
-        sim.set_lift(self.torso, self.assist * self.weight * (self.height() < 0.7).float())
+        sim.set_lift(self.torso, self.assist * self.weight * (self.height() < hs(0.7)).float())
         sim.step()
         q, v = sim.qpos.float(), sim.qvel.float()
         h = self.height()
@@ -1036,7 +1220,7 @@ class StandEnv(WalkEnv):
         jq, jv = q[:, 7:], v[:, 6:]
         st = standing.float()
         r = {}
-        r["height"] = ((h - 0.2) / 0.55).clamp(0.0, 1.0)
+        r["height"] = ((h - hs(0.2)) / hs(0.55)).clamp(0.0, 1.0)
         r["upright"] = tz.clamp(0.0, 1.0) ** 2
         r["pose"] = torch.exp(-((jq - self.default) ** 2).sum(-1) / 2.0) * st
         r["feet"] = contact.all(-1).float() * st
@@ -1277,9 +1461,13 @@ def load_policy(path, dev="cpu"):
 # ── what the 3D view gets (esasim.humanoid/1): the robot once (its body tree, to pose its 3D model), then frames ──────
 FORMAT = "esasim.humanoid-policy/1"
 TASK = "walk"
-FIELDS = (["t", "x", "y", "z", "qw", "qx", "qy", "qz"] + ["j%d" % k for k in range(29)]
-          + ["cvx", "cvy", "cwz", "vx", "vy", "wz", "cl", "cr", "fl", "fr"]
-          + ["h", "gx", "gy", "gz", "ax", "ay", "az"] + ["tq%d" % k for k in range(29)] + ["tt"])
+def make_fields(nu):
+    return (["t", "x", "y", "z", "qw", "qx", "qy", "qz"] + ["j%d" % k for k in range(nu)]
+            + ["cvx", "cvy", "cwz", "vx", "vy", "wz", "cl", "cr", "fl", "fr"]
+            + ["h", "gx", "gy", "gz", "ax", "ay", "az"] + ["tq%d" % k for k in range(nu)] + ["tt"])
+
+
+FIELDS = make_fields(29)
 # h: the ground under the pelvis (m); gx..gz: the pelvis' gyro (rad/s); ax..az: its accelerometer (m/s²); tq: each motor's torque (N m)
 
 
@@ -1342,11 +1530,23 @@ def robot_info(m, terrain="circuit", scan=True):
     joints = [m.joint(i).name for i in range(1, m.njnt)]
     limits = [[round(float(m.jnt_range[i][0]), 3), round(float(m.jnt_range[i][1]), 3)] for i in range(1, m.njnt)]
     tmax = [round(float(abs(m.jnt_actfrcrange[int(m.actuator_trnid[a][0])][1])), 1) for a in range(m.nu)]
-    return {"model": "unitree_g1", "glb": "g1", "bodies": bodies, "joints": joints, "limits": limits, "torque_max": tmax,
+    R = ROBOTS[ROBOT]
+    import mujoco
+    d = mujoco.MjData(m)
+    mujoco.mj_resetDataKeyframe(m, d, m.key("home").id)
+    mujoco.mj_forward(m, d)
+    feet = []
+    for side in ("left_foot", "right_foot"):   # the link each sole is on: how high its origin stands over the floor, how far ahead the sole's middle is
+        g = m.geom(side).id
+        b = int(m.geom_bodyid[g])
+        feet.append({"body": m.body(b).name, "sole": round(float(d.xpos[b][2] - d.geom_xpos[g][2] + m.geom_size[g][2]), 3),
+                     "ahead": round(float(d.geom_xpos[g][0] - d.xpos[b][0]), 3), "size": [round(2 * float(m.geom_size[g][0]), 3), round(2 * float(m.geom_size[g][1]), 3)]})
+    return {"model": ROBOT, "feet": feet, "name": R["name"], "short": R["short"], "glb": R["view"], "credit": R["credit"], "h0": H0,
+            "mass": round(float(m.body_subtreemass[m.body("pelvis").id]), 1),
+            "bodies": bodies, "joints": joints, "limits": limits, "torque_max": tmax,
             "default": [round(float(x), 4) for x in m.key("knees_bent").qpos[7:]], "fields": FIELDS,
-            "course": COURSE if terrain == "circuit" else None, "scan": {"x": SCAN_X, "y": SCAN_Y, "base": 0.75} if scan else None,
-            "camera": {"body": "torso_link", "pos": [0.0576, 0.0175, 0.4299], "pitch": 0.8308, "fov_h": 69.0, "aspect": 1.7778,
-                       "name": "Intel RealSense D435i in the head"}}
+            "course": COURSE if terrain == "circuit" else None, "scan": {"x": SCAN_X, "y": SCAN_Y, "base": round(hs(0.75), 3)} if scan else None,
+            "camera": R["camera"]}
 
 
 def frame_row(env, i, t):
@@ -1357,10 +1557,11 @@ def frame_row(env, i, t):
     gy = env.S("gyro_pelvis")[i].tolist()
     ct = env.contacts()[i].tolist()
     cl, cr = int(ct[0]), int(ct[1])
-    fl = float(env.S("left_foot_force")[i, 2].abs()) / 340.0       # in body weights (34 kg)
-    fr = float(env.S("right_foot_force")[i, 2].abs()) / 340.0
+    wt = env.f_max / 500.0 * 340.0                                 # its weight (N): the loads in body weights
+    fl = float(env.S("left_foot_force")[i, 2].abs()) / wt
+    fr = float(env.S("right_foot_force")[i, 2].abs()) / wt
     r3, r4 = (lambda v: round(v, 3)), (lambda v: round(v, 4))
-    return ([round(t, 3), r3(q[0]), r3(q[1]), r3(q[2])] + [r4(v) for v in q[3:7]] + [r3(v) for v in q[7:36]]
+    return ([round(t, 3), r3(q[0]), r3(q[1]), r3(q[2])] + [r4(v) for v in q[3:7]] + [r3(v) for v in q[7:7 + NU]]
             + [round(c[0], 2), round(c[1], 2), round(c[2], 2), round(lin[0], 2), round(lin[1], 2), round(gy[2], 2), cl, cr, round(fl, 2), round(fr, 2)]
             + [r3(float(env.ground(env.sim.qpos[i:i + 1, 0].float(), env.sim.qpos[i:i + 1, 1].float(), w=torch.tensor([i], device=env.dev))[0]))] + [round(v, 2) for v in gy]
             + [round(v, 1) for v in env.S("accelerometer_pelvis")[i].tolist()] + [round(v, 1) for v in env.sim.tq[i].float().tolist()] + [round(float(env.tt[i]), 3)])
@@ -1403,7 +1604,7 @@ def find_policies(ctx, task, terrain, checkpoint):
     import glob
     import os
     import torch
-    out = []
+    out, others, foreign = [], [0], [0]
 
     def consider(path, name, where):
         try:
@@ -1412,10 +1613,13 @@ def find_policies(ctx, task, terrain, checkpoint):
             ctx.log("Skipped %s: %s" % (name, e))
             return
         if st.get("format") != FORMAT:
-            ctx.log("Skipped %s: made for another block or version." % name)
+            foreign[0] += 1         # (a checkpoint of another block, or of an older version of this one)
             return
         if (st.get("task") or TASK) != task:
             return                  # (a policy of the other skill: walking, or standing up)
+        if (st.get("robot") or "g1") != ROBOT:
+            others[0] += 1          # (another robot's: kept as it is, for that robot)
+            return
         out.append({"same": 1 if (st.get("terrain") or "flat") == terrain else 0, "steps": int(st.get("steps") or 0),
                     "stamp": policy_stamp(path, name), "name": str(name), "where": where, "st": st, "path": path})
     for f in (ctx.inputs.get("policy") or []):
@@ -1430,6 +1634,10 @@ def find_policies(ctx, task, terrain, checkpoint):
                 continue
             consider(pth, "the policy run #%s left on this machine" % os.path.basename(os.path.dirname(os.path.dirname(pth))), "machine")
     out.sort(key=lambda x: (x["same"], x["steps"], x["stamp"]), reverse=True)
+    if others[0]:
+        ctx.log("%d policies of other robots left as they are (each robot carries on from its own)." % others[0])
+    if foreign[0]:
+        ctx.log("Skipped %d checkpoints made by other blocks or older versions of this one." % foreign[0])
     return out
 
 
@@ -1461,7 +1669,7 @@ def learn_run(ctx):
     n = sim.n
     dev = sim.tdev
     env = WalkEnv(sim, mjm, seed=seed, vmax=vmax, push=float(p.get("push") if p.get("push") not in (None, "") else 1.5), terrain=terrain, scan=True)
-    algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, 29, horizon=24)
+    algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, NU, horizon=24)
     steps_done, warm = 0, 0
     found = [] if start_over(p) else find_policies(ctx, TASK, terrain, "policy_checkpoint.pt")
     if start_over(p):
@@ -1485,7 +1693,7 @@ def learn_run(ctx):
         cut = max(1.0, left / 60.0 - 3.0)
         ctx.log("The run stops after %.0f minutes (Stop after): learning ends at %.0f minutes instead of %.0f, so the policy is kept. Raise Stop after to learn longer." % (ctx.max_minutes, cut, minutes))
         minutes = cut
-    ctx.log("Learning to walk on %s, on %s: %d robots at once, for up to %.0f minutes." % (GROUND_NAME[terrain], label, n, minutes))
+    ctx.log("The %s learning to walk on %s, on %s: %d robots at once, for up to %.0f minutes." % (ROBOTS[ROBOT]["name"], GROUND_NAME[terrain], label, n, minutes))
     env.reset_all()
     a_obs, a_priv = env.obs()
     ctx.telemetry(ch_bot, {"format": "esasim.humanoid/1", "kind": "robot", "robot": robot_info(mjm, terrain)})
@@ -1509,7 +1717,7 @@ def learn_run(ctx):
 
     def save(note):
         st = algo.state()
-        st.update({"format": FORMAT, "task": TASK, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": 29, "score": score(),
+        st.update({"format": FORMAT, "task": TASK, "robot": ROBOT, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": NU, "score": score(),
                    "note": note, "steps": steps_done, "device": label, "minutes": (time.time() - t_start) / 60.0,
                    "action_scale": ACTION_SCALE, "default": env.default.cpu(), "vmax": vmax, "ctrl_dt": CTRL_DT, "terrain": terrain})
         torch.save(st, out_path)
@@ -1587,7 +1795,7 @@ def learn_run(ctx):
         curve.close()
     if best < 0 or score() >= best:
         save("final")
-    name = "humanoid_walk_%s%s_%02d.pt" % ("circuit_" if terrain == "circuit" else "", time.strftime("%Y%m%d_%H%M"), int(round(max(0.0, best, score()))))
+    name = "humanoid_%swalk_%s%s_%02d.pt" % ("" if ROBOT == "g1" else ROBOT + "_", "circuit_" if terrain == "circuit" else "", time.strftime("%Y%m%d_%H%M"), int(round(max(0.0, best, score()))))
     shutil.copyfile(out_path, ctx.output("policy", name))
     ctx.log("Policy written: %s (walk score %.0f%%: how well it keeps the asked speed, times the share of runs it does not fall)." % (name, max(0.0, best, score())))
     ctx.log("Done (%s): %d iterations, %.0f million steps in %.1f minutes." % ({"time": "time is up", "asked": "finished on request"}[stop_reason], it, steps_done / 1e6, (time.time() - t_start) / 60))
@@ -1619,7 +1827,7 @@ def stand_run(ctx):
     n = sim.n
     dev = sim.tdev
     env = StandEnv(sim, mjm, seed=seed)
-    algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, 29, horizon=32)
+    algo = PPO(torch, dev, n, OBS_DIM, PRIV_DIM, NU, horizon=32)
     steps_done, assist = 0, ASSIST0
     found = [] if start_over(p) else find_policies(ctx, "standup", "flat", "standup_checkpoint.pt")
     if start_over(p):
@@ -1640,7 +1848,7 @@ def stand_run(ctx):
     rounds = max(2, min(12, int(math.ceil(6000.0 / n))))
     env.build_bank(rounds, ctx.log)
     env.assist = assist
-    ctx.log("Learning to stand up on the flat floor, on %s: %d robots at once, for up to %.0f minutes. Each try starts lying where a fall left it, with %.0f s to get up and stay up." % (label, n, minutes, STAND_EP * CTRL_DT))
+    ctx.log("The " + ROBOTS[ROBOT]["name"] + " learning to stand up on the flat floor, on %s: %d robots at once, for up to %.0f minutes. Each try starts lying where a fall left it, with %.0f s to get up and stay up." % (label, n, minutes, STAND_EP * CTRL_DT))
     ctx.log("At first an upward help on its torso (%.0f%% of its weight) makes it possible; the help goes down as it succeeds, to none." % (100 * assist))
     env.reset_all()
     a_obs, a_priv = env.obs()
@@ -1664,7 +1872,7 @@ def stand_run(ctx):
 
     def save(note):
         st = algo.state()
-        st.update({"format": FORMAT, "task": "standup", "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": 29, "score": score(),
+        st.update({"format": FORMAT, "task": "standup", "robot": ROBOT, "obs_dim": OBS_DIM, "priv_dim": PRIV_DIM, "act_dim": NU, "score": score(),
                    "note": note, "steps": steps_done, "device": label, "minutes": (time.time() - t_start) / 60.0, "assist": env.assist,
                    "up_pct": 100.0 * up_rate(), "action_scale": ACTION_SCALE, "default": env.default.cpu(), "ctrl_dt": CTRL_DT, "terrain": "flat"})
         torch.save(st, out_path)
@@ -1739,7 +1947,7 @@ def stand_run(ctx):
     if best < 0 or score() >= best:
         save("final")
     final = max(0.0, best, score())
-    name = "humanoid_standup_%s_%02d.pt" % (time.strftime("%Y%m%d_%H%M"), int(round(final)))
+    name = "humanoid_%sstandup_%s_%02d.pt" % ("" if ROBOT == "g1" else ROBOT + "_",time.strftime("%Y%m%d_%H%M"), int(round(final)))
     shutil.copyfile(out_path, ctx.output("policy", name))
     ctx.log("Policy written: %s (stand-up score %.0f%%: the share of falls it gets up from and stays up, less while it still needs help; help now %.0f%% of its weight)." % (name, final, 100 * env.assist))
     ctx.log("Done (%s): %d iterations, %.0f million steps in %.1f minutes." % ({"time": "time is up", "asked": "finished on request"}[stop_reason], it, steps_done / 1e6, (time.time() - t_start) / 60))
@@ -1771,11 +1979,15 @@ def walk_run(ctx):
     import torch
     p = ctx.params
     torch.set_num_threads(1)
-    pols, ups = [], []
+    pols, ups, others = [], [], 0
+    R = ROBOTS[ROBOT]
     for f in (ctx.inputs.get("policy") or []):
         if str(f.name).endswith(".pt"):
             try:
                 h = torch.load(f.path, map_location="cpu", weights_only=False)
+                if h.get("format") == FORMAT and (h.get("robot") or "g1") != ROBOT:
+                    others += 1
+                    continue
                 if h.get("format") == FORMAT and h.get("task") == "standup":
                     ups.append((policy_stamp(f.path, f.name), f))
                     continue
@@ -1786,8 +1998,10 @@ def walk_run(ctx):
                 pols.append((m_.group(1) if m_ else "", os.path.getmtime(f.path), f))
             except Exception as e:     # noqa: BLE001
                 ctx.log("Skipped %s: %s" % (f.name, e))
+    if others:
+        ctx.log("%d policies of other robots left aside: the %s walks with its own." % (others, R["name"]))
     if not pols:
-        raise RuntimeError("No walking policy yet: run the flow that learns to walk first (it writes humanoid_walk_*.pt to its dataset), and wire that dataset to Policies.")
+        raise RuntimeError("No walking policy for the %s yet: run Learn to walk with Robot set to %s first (it writes humanoid_%swalk_*.pt to its dataset), and wire that dataset to Policies." % (R["name"], R["name"], "" if ROBOT == "g1" else ROBOT + "_"))
     pols.sort(key=lambda x: (x[0], x[1]), reverse=True)
     want = str(p.get("policy_file") or "").strip()
     pick = [x for x in pols if want and want in str(x[2].name)]
@@ -1868,8 +2082,8 @@ def walk_run(ctx):
         env.mode_line[:] = True
     zone, lap, lap_t0, falls_lap, s_last = None, 1, 0.0, 0, 0
     hold = 1.5        # s standing still before it sets off
-    ctx.telemetry(ch_ev, {"text": ("The G1 is on the circuit (%s): it sets off at %.1f m/s" % ("counterclockwise" if dirn > 0 else "clockwise", speed)) if circuit
-                          else "The G1 is on the floor: it sets off at %.1f m/s" % speed})
+    ctx.telemetry(ch_ev, {"text": ("The %s is on the circuit (%s): it sets off at %.1f m/s" % (R["short"], "counterclockwise" if dirn > 0 else "clockwise", speed)) if circuit
+                          else "The %s is on the floor: it sets off at %.1f m/s" % (R["short"], speed)})
     o, _ = env.obs(noisy=False)
     while time.time() - t_wall0 < minutes * 60:
         # the controls
@@ -1941,7 +2155,7 @@ def walk_run(ctx):
         if getting_up:
             hq = float(env.height()[0])
             tz_ = float(env.S("torso_zaxis")[0, 2])
-            up_n = up_n + 1 if (hq > 0.65 and tz_ > 0.85) else 0
+            up_n = up_n + 1 if (hq > hs(0.65) and tz_ > 0.85) else 0
             if up_n >= 25:           # up and steady for half a second: walking again
                 ctx.telemetry(ch_ev, {"text": "Up on its own in %.1f s: walking on" % (sim_t - fell_at)})
                 getting_up, fell_at = False, None
@@ -1996,7 +2210,9 @@ def walk_run(ctx):
 
 
 def run(ctx):
+    import mujoco
     what = str(ctx.params.get("mode") or "Learn to walk").lower()
+    use_robot(robot_id(ctx.params), mujoco)
     if what.startswith("walk"):
         return walk_run(ctx)
     if "stand" in what:
