@@ -1,5 +1,5 @@
 # ── EsaSim block ──────────────────────────────────────────────────────
-# Humanoid (ws-humanoid-g1) · version 9 · machine block, Python: def run(ctx)
+# Humanoid (ws-humanoid-g1) · version 10 · machine block, Python: def run(ctx)
 # A humanoid robot (Unitree G1, Unitree H1 or Apptronik Apollo) learns to walk in MuJoCo, thousands at once on a GPU, on a flat floor or round a circuit, and to get up after a fall
 # Workspace: Gianluca De Novi's workspace · Author: Gianluca De Novi
 # Saved: 2026-11-13
@@ -14,7 +14,7 @@
 #   mode        select    What to do = "Learn to walk" of Learn to walk | Learn to stand up | Walk
 #   robot       select    Robot = "Unitree G1" of Unitree G1 | Unitree H1 | Apptronik Apollo
 #   accelerator select    Run on = "auto" of auto | NVIDIA GPU | CPU
-#   terrain     select    Ground = "Flat floor" of Flat floor | Circuit
+#   terrain     select    Ground = "Flat floor" of Flat floor | Circuit | Playground
 #   robots      number    Robots learning at once = 4096
 #   minutes     number    Minutes = 90
 #   max_speed   number    Top speed asked (m/s) = 1
@@ -308,6 +308,36 @@ COURSE = make_course()
 PATH = make_path()              # (points every 10 cm, heading, curvature, length)
 
 
+# ── the playground: an open floor with things to walk over, driven by hand (Walk, Ground: Playground) ─────────────
+# From the start (1.5, 9), facing +x: gravel (0-2 cm) at x 6-10, y 2-6 and stepping stones (0.4 m, 0-8 cm) at
+# x 6-10, y 12-16 · a sandbox (5 x 5 m, its sand 3 cm over the floor, soft: the feet sink in) at x 13-18, y 2-7 and a
+# puddle (5 x 5 m, 10 cm of water that drags at the legs) at x 13-18, y 11-16 · ice (4 x 4 m) at x 21-25, y 2-6 and
+# two curbs (6 and 10 cm) across x 21.5 and 23.5, y 11-16 · steps (4 up of 10 cm, a landing, 4 down) from x 27, y 7.5-10.5.
+def make_playground():
+    import numpy as np
+    r = np.random.default_rng(20261113)
+    gravel = np.round(r.uniform(0, 20, (41, 41))).astype(int)               # (mm: grains of up to 2 cm)
+    stones = (r.uniform(0, 1, (10, 10)) < 0.55) * r.integers(30, 81, (10, 10))  # (some 0.4 m slabs raised 3-8 cm, the rest flush)
+    return {"kind": "playground", "ramp": None,
+            "patches": [{"kind": "bumps", "x0": 6.0, "y0": 2.0, "size": 4.0, "cell": 0.1, "n": 41, "mm": gravel.ravel().tolist(), "label": "GRAVEL  0–2 cm"},
+                        {"kind": "blocks", "x0": 6.0, "y0": 12.0, "size": 4.0, "cell": 0.4, "n": 10, "mm": stones.ravel().tolist(), "label": "STEPPING STONES  3–8 cm"}],
+            "stairs": [{"x0": 21.5, "y": 13.5, "dir": 1, "n": 1, "rise": 0.06, "tread": 0.3, "landing": 0.3, "width": 5.0, "name": "curb", "label": "CURB  6 cm", "label_at": [21.65, 10.5]},
+                       {"x0": 23.5, "y": 13.5, "dir": 1, "n": 1, "rise": 0.10, "tread": 0.3, "landing": 0.3, "width": 5.0, "name": "curb", "label": "CURB  10 cm", "label_at": [23.65, 16.5]},
+                       {"x0": 27.0, "y": 9.0, "dir": 1, "n": 4, "rise": 0.10, "tread": 0.3, "landing": 1.5, "width": 3.0, "name": "steps"}],
+            "ice": {"x0": 21.0, "y0": 2.0, "size": 4.0, "top": 0.006, "mu": 0.08},
+            "sand": {"x0": 13.0, "y0": 2.0, "size": 5.0, "top": 0.03, "mu": 0.55},
+            "water": {"x0": 13.0, "y0": 11.0, "size": 5.0, "depth": 0.10, "drag": 1.5},
+            "start": [1.5, 9.0, 0.0], "area": [-2.0, 32.0, -1.0, 19.0]}
+
+
+PLAYGROUND = make_playground()
+
+
+def course_of(terrain):
+    """the ground's layout for a terrain: the circuit's, the playground's, or none (the flat floor)"""
+    return COURSE if terrain == "circuit" else PLAYGROUND if terrain == "playground" else None
+
+
 def stair_profile(u, st):
     """a staircase's height at distance u (m) from its first riser, along the way it climbs"""
     import numpy as np
@@ -322,10 +352,11 @@ def course_height(X, Y, course=COURSE):
     import numpy as np
     X, Y = np.broadcast_arrays(np.asarray(X, dtype=float), np.asarray(Y, dtype=float))
     H = np.zeros(X.shape)
-    rp = course["ramp"]
-    xs = rp["x"]
-    prof = np.interp(X, xs, [0.0, rp["h"], rp["h"], 0.0], left=0.0, right=0.0)
-    H += prof * np.clip((rp["half"] + rp["bank"] - np.abs(Y)) / rp["bank"], 0.0, 1.0)
+    rp = course.get("ramp")
+    if rp:
+        xs = rp["x"]
+        prof = np.interp(X, xs, [0.0, rp["h"], rp["h"], 0.0], left=0.0, right=0.0)
+        H += prof * np.clip((rp["half"] + rp["bank"] - np.abs(Y)) / rp["bank"], 0.0, 1.0)
     for pa in course["patches"]:
         n, c = pa["n"], pa["cell"]
         g = np.array(pa["mm"], dtype=float).reshape(n, n) / 1000.0        # [row along y, column along x]
@@ -350,10 +381,11 @@ def ground_grid(terrain):
     import numpy as np
     xs = np.linspace(HF_X0, HF_X1, int(round((HF_X1 - HF_X0) / HF_RES)) + 1)
     ys = np.linspace(HF_Y0, HF_Y1, int(round((HF_Y1 - HF_Y0) / HF_RES)) + 1)
-    if terrain != "circuit":
+    c = course_of(terrain)
+    if c is None:
         return np.zeros((len(ys), len(xs)))
     X, Y = np.meshgrid(xs, ys)
-    return course_height(X, Y)
+    return course_height(X, Y, c)
 
 
 def tiles_xml(t=None):
@@ -371,8 +403,8 @@ def tiles_xml(t=None):
 def ice_xml(xml, terrain, c=None):
     """the ice: a flat heightfield a few millimetres up that only the feet touch (contact pairs of their own, with the
     ice's low friction), the same kind of contact as the course's ground; on the flat floor, none"""
-    c = c or COURSE.get("ice")
-    if terrain != "circuit" or not c:
+    c = c or (course_of(terrain) or {}).get("ice")
+    if not c:
         return xml
     half = c["size"] / 2
     n = int(round(c["size"] / 0.1)) + 1           # (a point every 10 cm: small cells make good contacts)
@@ -383,9 +415,28 @@ def ice_xml(xml, terrain, c=None):
     return xml.replace("</contact>", pairs + "</contact>", 1)
 
 
+def sand_xml(xml, terrain):
+    """the sand: a flat heightfield its depth over the floor that only the feet touch, soft (a slow, damped contact
+    that lets them sink in, harder the deeper they go), the floor under it; only on the playground"""
+    c = (course_of(terrain) or {}).get("sand")
+    if not c:
+        return xml
+    half = c["size"] / 2
+    n = int(round(c["size"] / 0.1)) + 1
+    xml = xml.replace("</asset>", '<hfield name="sand" nrow="%d" ncol="%d" size="%.3f %.3f %.4f 0.01" /></asset>' % (n, n, half, half, c["top"]), 1)
+    xml = xml.replace("</worldbody>", '<geom name="sand" type="hfield" hfield="sand" pos="%.3f %.3f 0" contype="0" conaffinity="0" group="1" /></worldbody>'
+                      % (c["x0"] + half, c["y0"] + half), 1)
+    pairs = "".join('<pair name="%s_sand" geom1="%s" geom2="sand" condim="3" friction="%.3f %.3f" solref="%s" solimp="%s" />' % (f, f, c["mu"], c["mu"], SAND_SOLREF, SAND_SOLIMP)
+                    for f in ("left_foot", "right_foot"))
+    return xml.replace("</contact>", pairs + "</contact>", 1)
+
+
+SAND_SOLREF, SAND_SOLIMP = "0.06 1.2", "0.2 0.95 0.03 0.5 2"
+
+
 def load_model(mujoco, terrain="circuit"):
     import numpy as np
-    m = mujoco.MjModel.from_xml_string(ice_xml((MODEL_IN_USE or MODEL_XML).replace("</worldbody>", tiles_xml() + "</worldbody>"), terrain))
+    m = mujoco.MjModel.from_xml_string(sand_xml(ice_xml((MODEL_IN_USE or MODEL_XML).replace("</worldbody>", tiles_xml() + "</worldbody>"), terrain), terrain))
     m.opt.timestep = SIM_DT
     H = ground_grid(terrain)
     hid = m.hfield("terrain").id
@@ -393,11 +444,12 @@ def load_model(mujoco, terrain="circuit"):
     top = float(m.hfield_size[hid][2])
     a = int(m.hfield_adr[hid])
     m.hfield_data[a:a + H.size] = np.clip((H + HF_BASE) / top, 0.0, 1.0).ravel().astype(np.float32)
-    if terrain == "circuit" and COURSE.get("ice"):     # the ice: level, at its full height
-        ih = m.hfield("ice").id
-        ia = int(m.hfield_adr[ih])
-        m.hfield_data[ia:ia + int(m.hfield_nrow[ih]) * int(m.hfield_ncol[ih])] = 1.0
-    if terrain != "circuit":            # the flat floor only: the course's heightfield out of the way (fewer contacts)
+    for nm in ("ice", "sand"):          # the ice and the sand: level, at their full height
+        if (course_of(terrain) or {}).get(nm):
+            ih = m.hfield(nm).id
+            ia = int(m.hfield_adr[ih])
+            m.hfield_data[ia:ia + int(m.hfield_nrow[ih]) * int(m.hfield_ncol[ih])] = 1.0
+    if course_of(terrain) is None:      # the flat floor only: the course's heightfield out of the way (fewer contacts)
         m.geom_pos[m.geom("terrain").id][2] = -5.0
     return m
 
@@ -519,6 +571,9 @@ class CpuSim:
         self.tile_z = None
         self.lift = None             # (body, forces) an upward help on one body
         self.pushes = {}             # robot: [body, point in the body's frame, force (N, world), substeps left] (a push by hand)
+        self.water = None            # a puddle: {x0, y0, size, depth, drag}: the water pulls back on the parts of the legs in it
+        self._wv = np.zeros(6)
+        self._wet = {}               # robot: the bodies the water pulls on now
         self.qpos = torch.zeros(n, mjm.nq)
         self.qvel = torch.zeros(n, mjm.nv)
         self.ctrl = torch.zeros(n, mjm.nu)
@@ -538,6 +593,8 @@ class CpuSim:
             if lift is not None:
                 d.xfrc_applied[lift[0], 2] = lift[1][i]
             pu = self.pushes.get(i)
+            if self.water is not None:
+                self._wade(i, d)
             if pu is None:
                 for _ in range(N_SUB):
                     mj.mj_step(m, d)
@@ -590,6 +647,25 @@ class CpuSim:
 
     def refresh(self):
         pass
+
+    def _wade(self, i, d):
+        """the water's drag on the feet in it (quadratic, on what of each is under: a 0.02 m² face per foot, times the
+        drag setting), set once per control step (20 ms)"""
+        w, np_, mj = self.water, self.np, self.mj
+        P = d.xipos
+        if not hasattr(self, "_feet"):
+            self._feet = np_.array([int(self.m.geom_bodyid[self.m.geom(f).id]) for f in ("left_foot", "right_foot")])
+        F = self._feet                   # (the feet: what is in 10 cm of water)
+        under = F[(P[F, 0] >= w["x0"]) & (P[F, 0] <= w["x0"] + w["size"]) & (P[F, 1] >= w["y0"]) & (P[F, 1] <= w["y0"] + w["size"]) & (P[F, 2] < w["depth"] + 0.05)]
+        if i in self._wet:
+            d.xfrc_applied[self._wet[i], :] = 0.0
+        idx = under
+        for b in idx:
+            mj.mj_objectVelocity(self.m, d, mj.mjtObj.mjOBJ_BODY, int(b), self._wv, 0)
+            v = self._wv[3:]
+            frac = min(1.0, max(0.0, (w["depth"] + 0.05 - P[b, 2]) / 0.1))
+            d.xfrc_applied[b, :3] = -0.5 * 1000.0 * 0.02 * w["drag"] * frac * np_.linalg.norm(v) * v
+        self._wet[i] = idx
 
     def push_at(self, i, body, local, force, seconds=0.1):
         """push robot i by hand: force (N, world) at a point of a body (in its frame), for a moment"""
@@ -744,9 +820,10 @@ class WalkEnv:
         # the ground (the same heights as the heightfield the physics uses), to measure heights from it
         self.terrain = terrain
         self.Hg = torch.tensor(ground_grid(terrain), device=dev, dtype=torch.float32)
-        self.ice = COURSE.get("ice") if terrain == "circuit" else None     # (the ice: its top in the heights, not in the physics' heightfield)
-        if self.ice:
-            c_ = self.ice
+        lay = course_of(terrain) or {}
+        self.ice = lay.get("ice")             # (the ice and the sand: their tops in the heights, not in the physics' heightfield)
+        self.flats = [c_ for c_ in (lay.get("ice"), lay.get("sand")) if c_]
+        for c_ in self.flats:
             i0, i1 = int(round((c_["x0"] - HF_X0) / HF_RES)), int(round((c_["x0"] + c_["size"] - HF_X0) / HF_RES))
             j0, j1 = int(round((c_["y0"] - HF_Y0) / HF_RES)), int(round((c_["y0"] + c_["size"] - HF_Y0) / HF_RES))
             self.Hg[j0:j1 + 1, i0:i1 + 1] = torch.clamp(self.Hg[j0:j1 + 1, i0:i1 + 1], min=float(c_["top"]))
@@ -845,8 +922,7 @@ class WalkEnv:
             inl = (lp[:, 0] >= T["x0"]) & (lp[:, 0] < T["x0"] + S) & (lp[:, 1] >= T["y0"]) & (lp[:, 1] < T["y0"] + S)
             inr = (rp[:, 0] >= T["x0"]) & (rp[:, 0] < T["x0"] + S) & (rp[:, 1] >= T["y0"]) & (rp[:, 1] < T["y0"] + S)
             l, r = l | (inl & (fh[:, 0] < self.sole + 0.015)), r | (inr & (fh[:, 1] < self.sole + 0.015))
-        if self.ice:            # on the ice: the same
-            c_ = self.ice
+        for c_ in self.flats:   # on the ice or the sand: the same (in the sand, the soles below its top)
             fh = self.feet_height()
             lp, rp = self.S("left_foot_pos"), self.S("right_foot_pos")
             onl = (lp[:, 0] >= c_["x0"]) & (lp[:, 0] < c_["x0"] + c_["size"]) & (lp[:, 1] >= c_["y0"]) & (lp[:, 1] < c_["y0"] + c_["size"])
@@ -1539,7 +1615,7 @@ FIELDS = make_fields(29)
 # h: the ground under the pelvis (m); gx..gz: the pelvis' gyro (rad/s); ax..az: its accelerometer (m/s²); tq: each motor's torque (N m)
 
 
-GROUND_NAME = {"flat": "the flat floor", "course": "the straight test course", "circuit": "the circuit"}
+GROUND_NAME = {"flat": "the flat floor", "course": "the straight test course", "circuit": "the circuit", "playground": "the playground"}
 
 
 def make_zones(c=COURSE):
@@ -1547,16 +1623,28 @@ def make_zones(c=COURSE):
     z = []
     for pa in c["patches"]:
         mx = max(pa["mm"]) / 10.0
+        what = {"GRAVEL": "Gravel", "STEPPING": "Stepping stones"}.get(str(pa.get("label") or "").split(" ")[0], pa["kind"])
         z.append((pa["kind"], pa["x0"], pa["x0"] + pa["size"], pa["y0"], pa["y0"] + pa["size"], "rough",
-                  "Rough ground: %s up to %.0f cm" % (pa["kind"], mx)))
-    rp = c["ramp"]
-    pct = 100.0 * rp["h"] / (rp["x"][1] - rp["x"][0])
-    w = rp["half"]
-    z.append(("slope_a", rp["x"][0], rp["x"][1], -w, w, "slope", "Slope %s: " + "%.1f %%%% (%.0f°)" % (pct, math.degrees(math.atan(pct / 100)))))
-    z.append(("plateau", rp["x"][1], rp["x"][2], -w, w, "flat", "On the plateau, %.1f m up" % rp["h"]))
-    z.append(("slope_b", rp["x"][2], rp["x"][3], -w, w, "slope", "Slope %s: " + "%.1f %%%%" % pct))
+                  "Rough ground: %s up to %.0f cm" % (what.lower() if pa.get("label") else what, mx)))
+    rp = c.get("ramp")
+    if rp:
+        pct = 100.0 * rp["h"] / (rp["x"][1] - rp["x"][0])
+        w = rp["half"]
+        z.append(("slope_a", rp["x"][0], rp["x"][1], -w, w, "slope", "Slope %s: " + "%.1f %%%% (%.0f°)" % (pct, math.degrees(math.atan(pct / 100)))))
+        z.append(("plateau", rp["x"][1], rp["x"][2], -w, w, "flat", "On the plateau, %.1f m up" % rp["h"]))
+        z.append(("slope_b", rp["x"][2], rp["x"][3], -w, w, "slope", "Slope %s: " + "%.1f %%%%" % pct))
+    sd = c.get("sand")
+    if sd:
+        z.append(("sand", sd["x0"], sd["x0"] + sd["size"], sd["y0"], sd["y0"] + sd["size"], "sand", "Sand: soft, the feet sink in"))
+    wa = c.get("water")
+    if wa:
+        z.append(("water", wa["x0"], wa["x0"] + wa["size"], wa["y0"], wa["y0"] + wa["size"], "water", "Water, %.0f cm deep: it drags at the legs" % (100 * wa["depth"])))
     for st in c["stairs"]:
-        if st["name"] != "circuit":
+        if st["name"] == "curb":
+            x0_, x1_ = sorted([st["x0"] - 0.4 * st["dir"], st["x0"] + st["dir"] * (st["landing"] + 0.4)])
+            z.append(("curb%.0f" % (st["rise"] * 100), x0_, x1_, st["y"] - st["width"] / 2, st["y"] + st["width"] / 2, "curb", "A curb, %.0f cm" % (100 * st["rise"])))
+            continue
+        if st["name"] not in ("circuit", "steps"):
             continue
         up = (st["n"] - 1) * st["tread"]
         u_edges = [0.0, up, up + st["landing"], 2 * up + st["landing"]]
@@ -1579,10 +1667,13 @@ def make_zones(c=COURSE):
 
 
 ZONES = make_zones()
+ZONES_PLAY = make_zones(PLAYGROUND)
 
 
 def terrain_of(p, default):
     t = str(p.get("terrain") or default).lower()
+    if "playground" in t or "play" in t:
+        return "playground"
     return "circuit" if ("circuit" in t or "course" in t or "rough" in t or "stairs" in t) else "flat"
 
 
@@ -1617,7 +1708,7 @@ def robot_info(m, terrain="circuit", scan=True):
             "mass": round(float(m.body_subtreemass[m.body("pelvis").id]), 1),
             "bodies": bodies, "joints": joints, "limits": limits, "torque_max": tmax,
             "default": [round(float(x), 4) for x in m.key("knees_bent").qpos[7:]], "fields": FIELDS,
-            "course": COURSE if terrain == "circuit" else None, "scan": {"x": SCAN_X, "y": SCAN_Y, "base": round(hs(0.75), 3)} if scan else None,
+            "course": course_of(terrain), "scan": {"x": SCAN_X, "y": SCAN_Y, "base": round(hs(0.75), 3)} if scan else None,
             "camera": R["camera"]}
 
 
@@ -1735,6 +1826,9 @@ def learn_run(ctx):
     seed = int(p.get("seed") or 1)
     ch_bot, ch_train, ch_ctl = p.get("robot_channel") or "robot", p.get("channel") or "train", p.get("control_channel") or "control"
     terrain = terrain_of(p, "flat")
+    if terrain == "playground":
+        ctx.log("The playground is for driving the robot by hand (Walk): it learns on the circuit, whose ground has the same kinds of obstacles.")
+        terrain = "circuit"
     torch.manual_seed(seed)
     mjm = load_model(mujoco, terrain)
     sim, label = make_sim(mjm, n, p.get("accelerator") or "auto", ctx.log)
@@ -2027,9 +2121,9 @@ def stand_run(ctx):
 
 
 # ── walking with a learned policy, live ─────────────────────────────────────────────────────────────────────────────
-def zone_at(x, y):
-    """the part of the circuit at x, y: (key, kind, what it is)"""
-    for z in ZONES:
+def zone_at(x, y, zones=None):
+    """the part of the circuit (or of the playground) at x, y: (key, kind, what it is)"""
+    for z in (zones or ZONES):
         if z[1] <= x <= z[2] and z[3] <= y <= z[4]:
             return z
     return None
@@ -2093,8 +2187,8 @@ def walk_run(ctx):
     ctx.log("Walking policy %s: walk score %.0f%% on %s, %.0f million steps of experience on %s; %s." % (
         pol.name, float(st.get("score") or 0), GROUND_NAME.get(st.get("terrain") or "flat", "?"), float(st.get("steps") or 0) / 1e6,
         st.get("device") or "?", "it sees the ground ahead (elevation map from its head camera)" if sees else "it is blind (it feels the ground only through its feet)"))
-    if terrain == "circuit" and (st.get("terrain") or "flat") != "circuit":
-        ctx.log("This policy has not learned on the circuit: the rough ground, the slopes and the stairs are new to it (Learn the circuit teaches them).")
+    if terrain in ("circuit", "playground") and (st.get("terrain") or "flat") != "circuit":
+        ctx.log("This policy has not learned on the circuit: rough ground, steps and ice are new to it (Learn the circuit teaches them).")
     ch, ch_ev, ch_ctl = p.get("robot_channel") or "robot", p.get("events_channel") or "event", p.get("control_channel") or "control"
     mjm = load_model(mujoco, terrain)
     sim = CpuSim(mjm, 1, threads=1)
@@ -2102,6 +2196,11 @@ def walk_run(ctx):
     env.new_tiles(torch.zeros(1, dtype=torch.long), seed=20261112)       # (the same tiles every walk)
     ctx.telemetry(ch, {"format": "esasim.humanoid/1", "kind": "robot", "robot": robot_info(mjm, terrain, sees)})
     circuit = terrain == "circuit"
+    play = terrain == "playground"      # (driven by hand: the view's Drive pad or the keyboard sets where it walks)
+    if play:
+        sim.water = PLAYGROUND.get("water")
+    drive = [0.0, 0.0, 0.0]               # forward, sideways, turn: -1 to 1 each
+    drive_at = 0.0
     speed = float(p.get("speed") if p.get("speed") not in (None, "") else 0.6)
     heading = math.radians(float(p.get("heading") or 0.0))
     minutes = float(p.get("minutes") or 30)
@@ -2114,7 +2213,13 @@ def walk_run(ctx):
         env.line_y[:] = -float(q[0]) * math.sin(h) + float(q[1]) * math.cos(h)
 
     def start(at=None, i=None):
-        """on its feet: at the start line, or (at) where it fell, on its line"""
+        """on its feet: at the start line, or (at) where it fell, on its line (the playground: at its start, or where it fell)"""
+        if play:
+            env.reset(one, at=at or list(PLAYGROUND["start"]))
+            env.mode_line[:] = False
+            env.cmd[:] = 0.0
+            env.speed[:] = 0.0
+            return
         if circuit:
             i = 0 if i is None else i
             px, py = float(env.P[i, 0]), float(env.P[i, 1])
@@ -2145,6 +2250,9 @@ def walk_run(ctx):
         """up: walking again, from where it got up (on its line, or on the circuit from the point it reached)"""
         env.phase_dt[:] = 2 * math.pi * CTRL_DT * 1.4
         env.phase[:] = torch.tensor([0.0, math.pi])
+        if play:
+            env.mode_line[:] = False
+            return
         if circuit:
             env.put_on_path(one, int(env.pidx[0]), dirn)        # (its point of the circuit, followed while it got up)
         else:
@@ -2180,6 +2288,7 @@ def walk_run(ctx):
         part = re.sub(r"^(l|left)_", "left ", re.sub(r"^(r|right)_", "right ", part)).replace("_", " ")
         return "A push on its %s, from %s (%.1f m/s)" % ({"pelvis": "pelvis", "torso": "torso"}.get(part, part), frm, dv)
     ctx.telemetry(ch_ev, {"text": ("The %s is on the circuit (%s): it sets off at %.1f m/s" % (R["short"], "counterclockwise" if dirn > 0 else "clockwise", speed)) if circuit
+                          else ("The %s is in the playground: drive it with the arrows (or W A S D, Q E to step aside) or the buttons" % R["short"]) if play
                           else "The %s is on the floor: it sets off at %.1f m/s" % (R["short"], speed)})
     o, _ = env.obs(noisy=False)
     while time.time() - t_wall0 < minutes * 60:
@@ -2208,6 +2317,13 @@ def walk_run(ctx):
                 else:
                     set_line(heading)
                     ctx.telemetry(ch_ev, {"text": "New heading: %.0f°" % math.degrees(heading)})
+            elif c == "drive":            # {x: forward, y: to the left, turn: to the left}, each -1 to 1 (held keys or buttons)
+                if isinstance(v, dict):
+                    try:
+                        drive = [max(-1.0, min(1.0, float(v.get(k_) or 0.0))) for k_ in ("x", "y", "turn")]
+                        drive_at = time.time()
+                    except (TypeError, ValueError):
+                        pass
             elif c in ("push strength", "push_strength", "push speed"):
                 try:
                     push_v = max(0.1, min(3.0, float(v)))
@@ -2241,6 +2357,12 @@ def walk_run(ctx):
             a = up_act(o)
         else:
             env.speed[:] = 0.0 if hold > 0 else speed
+            if play:                      # driven: forward up to Walking speed, back at half of it, 0.35 m/s aside, 0.9 rad/s round
+                if time.time() - drive_at > 1.2:
+                    drive = [0.0, 0.0, 0.0]          # (no word from the view for a while: it stops)
+                fx = drive[0] * (speed if drive[0] > 0 else 0.5 * speed)
+                env.mode_line[:] = False
+                env.cmd[0, 0], env.cmd[0, 1], env.cmd[0, 2] = (0.0, 0.0, 0.0) if hold > 0 else (fx, 0.35 * drive[1], 0.9 * drive[2])
             hold -= CTRL_DT
             a = act(o[:, :walk_dim])
         rew, done, info = env.step(a)
@@ -2275,6 +2397,9 @@ def walk_run(ctx):
             fell_at = None
             if circuit:      # back on its feet on the circuit's line, a step further on
                 start(i=(int(env.pidx[0]) + 4 * dirn) % env.M)
+            elif play:       # back on its feet where it fell, facing the same way
+                q = sim.qpos[0]
+                start([float(q[0]), float(q[1]), math.atan2(2 * (float(q[3]) * float(q[6]) + float(q[4]) * float(q[5])), 1 - 2 * (float(q[5]) ** 2 + float(q[6]) ** 2))])
             else:
                 q = sim.qpos[0]
                 ly, lyaw = float(env.line_y[0]), float(env.line_yaw[0])
@@ -2284,6 +2409,15 @@ def walk_run(ctx):
             run += 1
             hold = 1.0
         # round the circuit: what it walks on now (said once as it gets there), a lap each time it crosses the start line
+        if play and fell_at is None:      # the playground: what it walks on now, said once as it gets there
+            q = sim.qpos[0]
+            z_ = zone_at(float(q[0]), float(q[1]), ZONES_PLAY)
+            if z_ is not zone:
+                zone = z_
+                if z_ is not None:
+                    yw = math.atan2(2 * (float(q[3]) * float(q[6]) + float(q[4]) * float(q[5])), 1 - 2 * (float(q[5]) ** 2 + float(q[6]) ** 2))
+                    climb = float(env.ground(q[0:1].float() + 0.6 * math.cos(yw), q[1:2].float() + 0.6 * math.sin(yw))[0] - env.ground(q[0:1].float(), q[1:2].float())[0])
+                    ctx.telemetry(ch_ev, {"text": zone_text(z_, climb)})
         if circuit and fell_at is None:
             q = sim.qpos[0]
             x_, y_ = float(q[0]), float(q[1])
@@ -2308,6 +2442,8 @@ def walk_run(ctx):
                 item["tiles"] = tiles_item(env, 0)
             if circuit:
                 item["path"] = dirn
+            elif play:
+                item["drive"] = [round(x_, 2) for x_ in drive]       # (no line: driven by hand)
             else:
                 item["line"] = [round(float(env.line_y[0]), 3), round(float(env.line_yaw[0]), 4)]
             ctx.telemetry(ch, item)

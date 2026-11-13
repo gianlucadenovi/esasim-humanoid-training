@@ -1,0 +1,15 @@
+{
+    "esasim": {
+        "kind": "blueprint",
+        "flow_id": 60
+    },
+    "name": "5 · Playground",
+    "description": "Drive the robot by hand (drive pad or keyboard) over sand, water, gravel, stepping stones, curbs, ice and steps, with its newest policies; push it to test its balance.",
+    "published_version": 0,
+    "updated": "2026-11-13 17:55:09",
+    "graph": {
+        "nodes": [],
+        "edges": [],
+        "notes": []
+    }
+}

@@ -32,12 +32,18 @@
             "file": "blueprints/4-test-the-circuit.json",
             "published_version": 7,
             "nodes": 9
+        },
+        {
+            "name": "5 · Playground",
+            "file": "blueprints/5-playground.json",
+            "published_version": 0,
+            "nodes": 0
         }
     ],
     "blocks": [
         {
             "id": "ws-humanoid-g1",
-            "version": 9,
+            "version": 10,
             "name": "Humanoid"
         }
     ]
