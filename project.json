@@ -24,7 +24,7 @@
         {
             "name": "3 · Circuit test",
             "file": "blueprints/3-circuit-test.json",
-            "published_version": 5,
+            "published_version": 6,
             "nodes": 9
         },
         {
