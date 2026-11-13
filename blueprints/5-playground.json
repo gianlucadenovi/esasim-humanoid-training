@@ -5,11 +5,195 @@
     },
     "name": "5 · Playground",
     "description": "Drive the robot by hand (drive pad or keyboard) over sand, water, gravel, stepping stones, curbs, ice and steps, with its newest policies; push it to test its balance.",
-    "published_version": 0,
-    "updated": "2026-11-13 17:55:09",
+    "published_version": 1,
+    "updated": "2026-11-13 18:58:51",
     "graph": {
-        "nodes": [],
-        "edges": [],
-        "notes": []
+        "nodes": [
+            {
+                "id": "policy",
+                "type": "dataset",
+                "x": -380,
+                "y": 200,
+                "params": {
+                    "dataset": "14",
+                    "version": "latest",
+                    "pattern": "*.pt"
+                },
+                "title": "Policies: humanoid-policy (made by flows 1 to 3)"
+            },
+            {
+                "id": "walk",
+                "type": "ws-humanoid-g1",
+                "x": 0,
+                "y": 180,
+                "params": {
+                    "mode": "Walk",
+                    "robot": "Unitree G1",
+                    "accelerator": "CPU",
+                    "terrain": "Playground",
+                    "minutes": 30,
+                    "speed": 0.6,
+                    "heading": 0,
+                    "policy_file": "",
+                    "after_fall": "Get up on its own"
+                },
+                "title": "Drive it round the playground"
+            },
+            {
+                "id": "tel",
+                "type": "telemetry",
+                "x": 380,
+                "y": 200,
+                "params": {
+                    "interval": 0.5,
+                    "channels": "robot,event",
+                    "keep": 400
+                },
+                "title": "The walk"
+            },
+            {
+                "id": "main",
+                "type": "viewer-3d",
+                "x": 1100,
+                "y": -160,
+                "params": {
+                    "quality": "high",
+                    "events_channel": "event",
+                    "controls": "drive\nslider speed 0 1.5 0.6 0.05\nbutton Push\nslider push_strength 0.2 2 0.8 0.1\nbutton Reset",
+                    "control_channel": "control",
+                    "camera": "free"
+                },
+                "title": "The playground (drive it from here)"
+            },
+            {
+                "id": "cam_eyes",
+                "type": "viewer-3d",
+                "x": 1460,
+                "y": -160,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: eyes"
+                },
+                "title": "Its head camera"
+            },
+            {
+                "id": "cam_follow",
+                "type": "viewer-3d",
+                "x": 1460,
+                "y": 80,
+                "params": {
+                    "quality": "balanced",
+                    "camera": "humanoid: follow"
+                },
+                "title": "Behind it"
+            },
+            {
+                "id": "telemetry",
+                "type": "viewer-3d",
+                "x": 1100,
+                "y": 400,
+                "params": {
+                    "camera": "humanoid: telemetry"
+                },
+                "title": "Telemetry"
+            }
+        ],
+        "edges": [
+            {
+                "id": "policy.files>walk.policy",
+                "from": {
+                    "node": "policy",
+                    "port": "files"
+                },
+                "to": {
+                    "node": "walk",
+                    "port": "policy"
+                }
+            },
+            {
+                "id": "walk.telemetry>tel.from",
+                "from": {
+                    "node": "walk",
+                    "port": "telemetry"
+                },
+                "to": {
+                    "node": "tel",
+                    "port": "from"
+                }
+            },
+            {
+                "id": "tel.stream>main.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "main",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_eyes.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_eyes",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>cam_follow.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "cam_follow",
+                    "port": "scene"
+                }
+            },
+            {
+                "id": "tel.stream>telemetry.scene",
+                "from": {
+                    "node": "tel",
+                    "port": "stream"
+                },
+                "to": {
+                    "node": "telemetry",
+                    "port": "scene"
+                }
+            }
+        ],
+        "notes": [],
+        "dash": {
+            "items": {
+                "main": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 12,
+                    "h": 12
+                },
+                "cam_eyes": {
+                    "x": 0,
+                    "y": 12,
+                    "w": 12,
+                    "h": 12
+                },
+                "cam_follow": {
+                    "x": 0,
+                    "y": 24,
+                    "w": 12,
+                    "h": 12
+                },
+                "telemetry": {
+                    "x": 0,
+                    "y": 36,
+                    "w": 12,
+                    "h": 12
+                }
+            }
+        }
     }
 }
