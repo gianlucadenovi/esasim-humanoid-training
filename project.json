@@ -10,28 +10,28 @@
     "readme": "README.md",
     "blueprints": [
         {
-            "name": "1 · Learn to walk",
-            "file": "blueprints/1-learn-to-walk.json",
-            "published_version": 6,
-            "nodes": 9
+            "name": "1 · Learn to stand up",
+            "file": "blueprints/1-learn-to-stand-up.json",
+            "published_version": 1,
+            "nodes": 10
         },
         {
-            "name": "2 · Learn the circuit",
-            "file": "blueprints/2-learn-the-circuit.json",
-            "published_version": 5,
-            "nodes": 11
-        },
-        {
-            "name": "3 · Circuit test",
-            "file": "blueprints/3-circuit-test.json",
+            "name": "2 · Learn to walk",
+            "file": "blueprints/2-learn-to-walk.json",
             "published_version": 7,
             "nodes": 9
         },
         {
-            "name": "4 · Learn to stand up",
-            "file": "blueprints/4-learn-to-stand-up.json",
-            "published_version": 1,
-            "nodes": 10
+            "name": "3 · Learn the circuit",
+            "file": "blueprints/3-learn-the-circuit.json",
+            "published_version": 5,
+            "nodes": 11
+        },
+        {
+            "name": "4 · Test the circuit",
+            "file": "blueprints/4-test-the-circuit.json",
+            "published_version": 7,
+            "nodes": 9
         }
     ],
     "blocks": [

@@ -3,10 +3,10 @@
         "kind": "blueprint",
         "flow_id": 43
     },
-    "name": "3 · Circuit test",
+    "name": "4 · Test the circuit",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
     "published_version": 7,
-    "updated": "2026-11-13 16:34:50",
+    "updated": "2026-11-13 17:13:30",
     "graph": {
         "nodes": [
             {
@@ -19,7 +19,7 @@
                     "version": "latest",
                     "pattern": "*.pt"
                 },
-                "title": "Policies: humanoid-policy (made by flows 1 and 2)"
+                "title": "Policies: humanoid-policy (made by flows 1 to 3)"
             },
             {
                 "id": "walk",
@@ -36,7 +36,7 @@
                     "heading": 0,
                     "policy_file": ""
                 },
-                "title": "G1: walk the circuit"
+                "title": "Walk the circuit"
             },
             {
                 "id": "tel",
@@ -58,11 +58,11 @@
                 "params": {
                     "quality": "high",
                     "events_channel": "event",
-                    "controls": "button Push\nbutton Reset\nslider speed 0 1.5 0.6 0.05\nslider heading -180 180 0 5",
+                    "controls": "button Push\nslider push_strength 0.2 2 0.8 0.1\nbutton Reset\nslider speed 0 1.5 0.6 0.05\nslider heading -180 180 0 5",
                     "control_channel": "control",
                     "camera": "free"
                 },
-                "title": "The G1 on the circuit (director)"
+                "title": "The robot on the circuit (director)"
             },
             {
                 "id": "cam_eyes",
