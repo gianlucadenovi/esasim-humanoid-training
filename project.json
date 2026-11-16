@@ -7,6 +7,8 @@
     "name": "Humanoid training",
     "description": "A humanoid robot (Unitree G1 by default, or a Unitree H1 or an Apptronik Apollo) learns to get up after a fall and to walk in MuJoCo on the GPU, walks a circuit live in 3D, and is driven by hand round a playground of sand, water and obstacles.",
     "type": "robotics",
+    "cover": "upload",
+    "cover_file": "assets/cover.jpg",
     "readme": "README.md",
     "blueprints": [
         {

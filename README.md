@@ -1,3 +1,7 @@
+<!-- esasim: cover -->
+![Humanoid training](assets/cover.jpg)
+<!-- /esasim: cover -->
+
 <div align="center">
 
 <!-- Banner: upload a picture named banner.png under Data › Readme pictures (the robot climbing the circuit's stairs, from the Side camera, works well), then: ![Humanoid training](pictures/banner.png) -->
