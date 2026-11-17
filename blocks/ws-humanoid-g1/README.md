@@ -16,14 +16,14 @@ Tuned on the G1; the H1 and the Apollo learn the same task scaled to their size,
 
 Packages: torch, mujoco, and for the GPU mujoco-warp and warp-lang.
 
-An [EsaSim](https://esacode.com/) blueprint block: it runs on a machine, in Python (`backend.py`, `def run(ctx)`).
+An [EsaSim](https://esacode.com/) blueprint block: it runs on a worker, in Python (`backend.py`, `def run(ctx)`).
 
 | | |
 |---|---|
 | Block | `ws-humanoid-g1` · version 11 |
 | Workspace | Gianluca De Novi's workspace |
 | Author | Gianluca De Novi |
-| Runs on | Any machine, NVIDIA GPU |
+| Runs on | Any worker, NVIDIA GPU |
 
 ## Inputs
 
