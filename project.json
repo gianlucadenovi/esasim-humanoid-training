@@ -14,7 +14,7 @@
         {
             "name": "1 · Learn to stand up",
             "file": "blueprints/1-learn-to-stand-up.json",
-            "published_version": 1,
+            "published_version": 2,
             "nodes": 10
         },
         {
@@ -26,19 +26,19 @@
         {
             "name": "3 · Learn the circuit",
             "file": "blueprints/3-learn-the-circuit.json",
-            "published_version": 5,
+            "published_version": 6,
             "nodes": 11
         },
         {
             "name": "4 · Test the circuit",
             "file": "blueprints/4-test-the-circuit.json",
-            "published_version": 8,
+            "published_version": 9,
             "nodes": 9
         },
         {
             "name": "5 · Playground",
             "file": "blueprints/5-playground.json",
-            "published_version": 2,
+            "published_version": 3,
             "nodes": 7
         }
     ],

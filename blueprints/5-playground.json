@@ -5,19 +5,17 @@
     },
     "name": "5 · Playground",
     "description": "Drive the robot by hand (drive pad or keyboard) over sand, water, gravel, stepping stones, curbs, ice and steps, with its newest policies; push it to test its balance.",
-    "published_version": 2,
-    "updated": "2026-11-13 19:12:49",
+    "published_version": 3,
+    "updated": "2026-11-18 23:04:46",
     "graph": {
         "nodes": [
             {
                 "id": "policy",
-                "type": "dataset",
+                "type": "project-assets",
                 "x": -380,
                 "y": 200,
                 "params": {
-                    "dataset": "14",
-                    "version": "latest",
-                    "pattern": "*.pt"
+                    "files": "assets/humanoid-policy/*.pt"
                 },
                 "title": "Policies: humanoid-policy (made by flows 1 to 3)"
             },

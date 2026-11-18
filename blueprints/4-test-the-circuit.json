@@ -5,19 +5,17 @@
     },
     "name": "4 · Test the circuit",
     "description": "The learned policy walks the G1 live in 3D: set its speed and heading, push it, reset it.",
-    "published_version": 8,
-    "updated": "2026-11-15 17:54:39",
+    "published_version": 9,
+    "updated": "2026-11-18 23:04:46",
     "graph": {
         "nodes": [
             {
                 "id": "policy",
-                "type": "dataset",
+                "type": "project-assets",
                 "x": -380,
                 "y": 200,
                 "params": {
-                    "dataset": "14",
-                    "version": "latest",
-                    "pattern": "*.pt"
+                    "files": "assets/humanoid-policy/*.pt"
                 },
                 "title": "Policies: humanoid-policy (made by flows 1 to 3)"
             },
