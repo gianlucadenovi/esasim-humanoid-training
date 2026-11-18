@@ -14,19 +14,19 @@
         {
             "name": "1 · Learn to stand up",
             "file": "blueprints/1-learn-to-stand-up.json",
-            "published_version": 2,
+            "published_version": 3,
             "nodes": 10
         },
         {
             "name": "2 · Learn to walk",
             "file": "blueprints/2-learn-to-walk.json",
-            "published_version": 7,
+            "published_version": 8,
             "nodes": 9
         },
         {
             "name": "3 · Learn the circuit",
             "file": "blueprints/3-learn-the-circuit.json",
-            "published_version": 6,
+            "published_version": 7,
             "nodes": 11
         },
         {

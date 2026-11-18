@@ -5,8 +5,8 @@
     },
     "name": "1 · Learn to stand up",
     "description": "Thousands of G1s lying where a fall left them learn to get up and stay up on the GPU, with a help taken away as they succeed; the policy goes to the humanoid-policy dataset, where 3 · Circuit test uses it after each fall.",
-    "published_version": 2,
-    "updated": "2026-11-18 23:04:46",
+    "published_version": 3,
+    "updated": "2026-11-18 23:37:05",
     "graph": {
         "nodes": [
             {
@@ -35,17 +35,7 @@
                     "seed": 3,
                     "training": "Continue"
                 },
-                "title": "Learn to stand up",
-                "dest": {
-                    "location": 3,
-                    "name": "humanoid-policy",
-                    "folder": "humanoid-policy",
-                    "live": false,
-                    "move": false,
-                    "ports": [
-                        "policy"
-                    ]
-                }
+                "title": "Learn to stand up"
             },
             {
                 "id": "tel_robot",
