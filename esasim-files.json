@@ -14,6 +14,20 @@
             "in": "repo"
         },
         {
+            "path": "humanoid-policy/humanoid_standup_20261112_1839_55.pt",
+            "size": 6197053,
+            "sha256": "644d2bccf6c7fd4722e8f69f6f54cdd5264ea822af8b6e66d4e0e27742a43b24",
+            "zip": "assets/humanoid-policy/humanoid_standup_20261112_1839_55.pt",
+            "in": "repo"
+        },
+        {
+            "path": "humanoid-policy/humanoid_walk_20261112_0039_85.pt",
+            "size": 1800185,
+            "sha256": "281ee0d7048869639f8cc10b1f53066a44df9a8f34bd07575fd2eb82bdaf438c",
+            "zip": "assets/humanoid-policy/humanoid_walk_20261112_0039_85.pt",
+            "in": "repo"
+        },
+        {
             "path": "models/g1.glb",
             "size": 6058488,
             "sha256": "6811cbc0adbc4254b1c20041149a8a30c812b93415971e03cd5b5471f4cbcab0",
@@ -42,5 +56,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-18T23:04:04+00:00"
+    "saved": "2026-11-18T23:04:21+00:00"
 }
