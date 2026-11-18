@@ -184,6 +184,7 @@ The files the project's views draw with (3D models, textures, sounds), in [asset
 - [humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt](assets/humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt) · 5.5 MB
 - [humanoid-policy/humanoid_standup_20261112_1839_55.pt](assets/humanoid-policy/humanoid_standup_20261112_1839_55.pt) · 5.9 MB
 - [humanoid-policy/humanoid_walk_20261112_0039_85.pt](assets/humanoid-policy/humanoid_walk_20261112_0039_85.pt) · 1.7 MB
+- [humanoid-policy/humanoid_walk_circuit_20261113_0142_70.pt](assets/humanoid-policy/humanoid_walk_circuit_20261113_0142_70.pt) · 5.9 MB
 - [models/g1.glb](assets/models/g1.glb) · 5.8 MB
 - [models/robot-apollo.json](assets/models/robot-apollo.json) · 2.1 MB
 - [models/robot-h1.json](assets/models/robot-h1.json) · 1.1 MB

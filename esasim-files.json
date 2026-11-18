@@ -28,6 +28,13 @@
             "in": "repo"
         },
         {
+            "path": "humanoid-policy/humanoid_walk_circuit_20261113_0142_70.pt",
+            "size": 6196908,
+            "sha256": "8a029d1e0be4a00ee5657ea51b98fd693db181b88f2a11745fa5165baef2499c",
+            "zip": "assets/humanoid-policy/humanoid_walk_circuit_20261113_0142_70.pt",
+            "in": "repo"
+        },
+        {
             "path": "models/g1.glb",
             "size": 6058488,
             "sha256": "6811cbc0adbc4254b1c20041149a8a30c812b93415971e03cd5b5471f4cbcab0",
@@ -56,5 +63,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-18T23:04:21+00:00"
+    "saved": "2026-11-18T23:04:33+00:00"
 }
