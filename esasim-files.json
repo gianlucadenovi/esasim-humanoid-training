@@ -4,37 +4,15 @@
         "version": 1
     },
     "release": null,
-    "datasets": [
-        {
-            "name": "humanoid-policy",
-            "dataset_id": 14,
-            "root": "humanoid-policy",
-            "location": {
-                "id": 3,
-                "kind": "worker"
-            },
-            "made_by": [
-                "2 · Learn to walk: Learn to walk",
-                "3 · Learn the circuit: Learn the circuit",
-                "1 · Learn to stand up: Learn to stand up"
-            ],
-            "version": 4,
-            "files": 4,
-            "bytes": 20006350,
-            "key": "ec9f4356358aacd0f0fe8ed4826e8c63cc88a2a8712f9805a662a9879323063a",
-            "parts": [
-                {
-                    "zip": "files/humanoid-policy.zip",
-                    "size": 17903031,
-                    "sha256": "764076dcf085fb4132cc21318653f61021723a8e6bf9fc52cd3bf407dda01b46",
-                    "files": 4,
-                    "in": "repo"
-                }
-            ],
-            "left_out": []
-        }
-    ],
+    "datasets": [],
     "assets": [
+        {
+            "path": "humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt",
+            "size": 5812204,
+            "sha256": "a64841a6bd5e5277f78012a57fbc2630490e95803f97061502618b9728f4d628",
+            "zip": "assets/humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt",
+            "in": "repo"
+        },
         {
             "path": "models/g1.glb",
             "size": 6058488,
@@ -64,5 +42,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-15T06:47:21+00:00"
+    "saved": "2026-11-18T23:04:04+00:00"
 }

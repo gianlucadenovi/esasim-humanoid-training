@@ -181,15 +181,10 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
+- [humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt](assets/humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt) · 5.5 MB
 - [models/g1.glb](assets/models/g1.glb) · 5.8 MB
 - [models/robot-apollo.json](assets/models/robot-apollo.json) · 2.1 MB
 - [models/robot-h1.json](assets/models/robot-h1.json) · 1.1 MB
 - [textures/esacode-logo.png](assets/textures/esacode-logo.png) · 25 KB
-
-### Files the blueprints make
-
-Kept with the project (listed in [esasim-files.json](esasim-files.json)), so it runs without making them again:
-
-- **humanoid-policy** · 4 files, 19 MB · made by 2 · Learn to walk: Learn to walk, 3 · Learn the circuit: Learn the circuit, 1 · Learn to stand up: Learn to stand up · in [files/humanoid-policy.zip](files/humanoid-policy.zip)
 
 Keys pasted in blocks (secret settings) are not saved here, nor are the team and the results of runs.
