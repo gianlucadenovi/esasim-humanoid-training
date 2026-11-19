@@ -181,6 +181,7 @@ An [EsaSim](https://esacode.com/) project of the workspace Gianluca De Novi's wo
 
 The files the project's views draw with (3D models, textures, sounds), in [assets/](assets/):
 
+- [covers/cover.jpg](assets/covers/cover.jpg) · 25 KB
 - [humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt](assets/humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt) · 5.5 MB
 - [humanoid-policy/humanoid_standup_20261112_1839_55.pt](assets/humanoid-policy/humanoid_standup_20261112_1839_55.pt) · 5.9 MB
 - [humanoid-policy/humanoid_walk_20261112_0039_85.pt](assets/humanoid-policy/humanoid_walk_20261112_0039_85.pt) · 1.7 MB

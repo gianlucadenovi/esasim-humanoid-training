@@ -7,6 +7,13 @@
     "datasets": [],
     "assets": [
         {
+            "path": "covers/cover.jpg",
+            "size": 25639,
+            "sha256": "4c4e3a99dc73fbbf91af4a7a83f5cc4dcef50055e94899be83ade1d63b6df42f",
+            "zip": "assets/covers/cover.jpg",
+            "in": "repo"
+        },
+        {
             "path": "humanoid-policy/humanoid_h1_walk_20261113_1351_90.pt",
             "size": 5812204,
             "sha256": "a64841a6bd5e5277f78012a57fbc2630490e95803f97061502618b9728f4d628",
@@ -63,5 +70,5 @@
             "in": "repo"
         }
     ],
-    "saved": "2026-11-18T23:04:33+00:00"
+    "saved": "2026-11-19T01:10:26+00:00"
 }
